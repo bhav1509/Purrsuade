@@ -1,0 +1,50 @@
+{
+  "xp": 175,
+  "coins": 69,
+  "streak": 1,
+  "lastDaily": "2026-10-05",
+  "duration": 2,
+  "room": "oak_wood",
+  "history": [
+    {
+      "topic": "Describe your ideal weekend and what makes it enjoyable. Explain it as if the listener knows nothing about the subject.",
+      "difficulty": 1,
+      "rerolled": false,
+      "transcript": "Okay, topic name is describe your ideal weekend and what makes it enjoyable.\n\nExplain it as if the listener knows nothing about the subject.\n\nSo generally my weekend is, The days that I get off from my company.\n\nSo these are the most days that I reserved for reset, mentally and physically.\n\nSo I'll get, I'll generally get up late, do my house chores, and a general reset of my desk, my bed and all my surroundings.\n\nApart from this, I also go for a run or try to go for a run clip to meet new people.\n\nAnd this is the time when I meet my friends outside of work.\n\nSo we generally go to a cafe or like um, go to a restaurant to have nice food.\n\nSo this is what generally happens on the weekend.\n\nApart from this, I also like to do like small projects.\n\nSo, um, over this weekend I built a app for learning how to speak, which was like gamified, um, using a cat room kind of a situation.\n\nSo, um, this is what I did over this weekend, but generally over weekends I take small projects, so the weekend before that was a small art project, uh, which was to create a miniature, uh, flower shop.\n\nSo this was actually gifted to me by my friends for my birthday.\n\nSo, generally over the weekends I take small, small projects that are creative. To make it more fun.\n\nUm, apart from this, um, I try to spend quality time with my family, like watching movies or like just uh, playing board games with them.\n\nUm, so we generally play Katan, um, uh, Monopoly deal.\n\nSo the multiple multiplayer games that we play for a lot of time.\n\nSo this is how my beacon generally goes, and I generally end up having a nice team, and Redwin Monday comes.\n\nSo that's the typical knee, I guess.\n\nSo yeah, that's how many can go. ",
+      "feedback": "You have good material and a natural conversational style, but the answer loses clarity because you keep restarting sentences and adding details without a clear hierarchy.\n\nArea\tScore\nClarity\t6/10\nStructure\t5/10\nConfidence\t6/10\nVocabulary\t6/10\nConciseness\t5/10\nGrammar\t6/10\nOverall\t6/10\n1. Three specific strengths\nYou gave concrete examples. The speaking app and miniature flower shop make your answer memorable rather than generic.\nYou covered multiple dimensions of an enjoyable weekend: rest, exercise, friends, creativity, and family.\nYour ideas sound personal and authentic. You aren't relying on memorized or overly sophisticated language, which is good for speaking.\n2. Three specific improvements\nStop restarting sentences.\nYou frequently use “So…,” “Um…,” “Apart from this…,” “Generally…” to buy thinking time. Some fillers are normal, but here they interrupt your ideas.\nInstead of: “So generally my weekend is… The days that I get off…”\nSay: “My ideal weekend is mainly about resetting mentally and physically.”\nGroup your ideas instead of listing them randomly.\nYou move from chores → running → friends → projects → family → games. The listener has to construct the structure themselves.\nUse simpler, more accurate phrasing.\nA few phrases sound translated or improvised:\n“the days that I get off from my company” → “my days off from work”\n“the most days that I reserved for reset” → “I reserve these days to reset”\n“a app” → “an app”\n“small, small projects” → “small creative projects”\n“my weekend generally goes” → “my weekend usually goes”\n3. A stronger structure\n\nUse a simple purpose → three parts → conclusion structure:\n\nOpening:\n\n“My ideal weekend is a balance between relaxing, being social, and doing something creative.”\n\nPart 1 — Reset:\nSleep in, clean your space, run/exercise.\n\nPart 2 — People:\nMeet friends, go to cafés/restaurants, spend time with family.\n\nPart 3 — Creativity:\nWork on a small personal project. Give one example.\n\nConclusion:\n\n“So by Sunday evening, I feel rested, connected, and ready for Monday.”\n\nThat would make the same content feel much more organized without requiring more vocabulary.\n\n4. Short improved example\nImproved Speaking Example\n\nMy ideal weekend is a balance between resting, spending time with people, and doing something creative.\n\nFirst, I like to use the weekend to reset mentally and physically. I usually sleep in a little, clean my room, organize my desk, and go for a run.\n\nI also like to spend time with friends and family. I might meet my friends at a café or restaurant, and at home, my family and I usually watch movies or play board games like Catan or Monopoly Deal.\n\nThe other thing I really enjoy is working on small creative projects. For example, this weekend I built a small app to help people practice speaking. Another weekend, I made a miniature flower shop that my friends had gifted me.\n\nSo, for me, a great weekend is one where I can rest, connect with people, and create something. By Monday, I feel refreshed and ready to get back to work.\n\n5. Your focus for the next speaking session\n\nPractice finishing one idea before starting the next.\n\nFor your next answer, use this rule: one sentence = one complete idea. And whenever you feel the urge to say “So… um… apart from this…”, pause for one second instead.\n\nYour biggest opportunity isn't vocabulary right now. It's organizing your thoughts while speaking. Once that improves, your existing vocabulary will sound much stronger.",
+      "scores": {
+        "clarity": 6,
+        "structure": 5,
+        "confidence": 6,
+        "vocabulary": 6,
+        "conciseness": 5,
+        "grammar": 6,
+        "overall": 6
+      },
+      "self": {
+        "confidence": 5,
+        "fluency": 4,
+        "satisfaction": 3
+      },
+      "id": 1791169020061,
+      "date": "2026-10-05",
+      "isDaily": true,
+      "earnedXP": 175,
+      "earnedCoins": 60,
+      "duration": 2,
+      "prep": 60
+    }
+  ],
+  "cat": {
+    "name": "Putchi",
+    "coat": "calico",
+    "hunger": 81.57588568055554,
+    "thirst": 78.96599333333333,
+    "cleanliness": 88.43129633333334,
+    "happiness": 92.00707746666666,
+    "lastUpdated": 1791201193552,
+    "criticalSince": null,
+    "alive": true
+  },
+  "version": 1
+}

@@ -2,7 +2,9 @@ const STORE='communication-quest-week1-v1';
 const $=s=>document.querySelector(s);
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 const round1=n=>Math.round(n*10)/10;
-const today=()=>new Date().toISOString().slice(0,10);
+// Local calendar dates (YYYY-MM-DD), so late-night sessions land on the day you did them.
+const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const today=()=>ymd(new Date());
 const dayDiff=(a,b)=>Math.floor((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000);
 
 const BASE_TOPICS=[
@@ -43,7 +45,7 @@ function averageOverall(){const a=state.history.map(h=>+h.scores.overall).filter
 function recentAvg(){const a=state.history.slice(0,5).map(h=>+h.scores.overall).filter(Boolean);return a.length? a.reduce((x,y)=>x+y,0)/a.length:0;}
 function difficulty(){let d=1+Math.floor(state.history.length/5); const a=recentAvg(); if(a>=8)d++; if(a && a<6)d--; return clamp(d,1,7);}
 function nextDuration(){const a=state.history.slice(0,3).map(h=>+h.scores.overall).filter(Boolean);if(a.length<3)return state.duration;const avg=a.reduce((x,y)=>x+y,0)/a.length;if(avg>=7.5)return clamp(state.duration+.5,2,5);if(avg<5.5)return clamp(state.duration-.5,2,5);return state.duration;}
-function yesterday(){const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10);}
+function yesterday(){const d=new Date();d.setDate(d.getDate()-1);return ymd(d);}
 function catMood(){const c=state.cat;if(!c.alive)return ['Gone','Miso is no longer here. Restore a backup or reset the app to begin again.'];const m=Math.min(c.hunger,c.thirst,c.cleanliness,c.happiness);if(m<15)return ['Critical','Miso urgently needs care.'];if(m<35)return ['Unhappy','Miso needs some attention.'];if(m<60)return ['Okay','Miso is doing okay, but could use some care.'];if(m<85)return ['Happy','Miso is feeling content.'];return ['Thriving','Miso is thriving!'];}
 function skillAvg(s){const a=state.history.map(h=>+h.scores[s]).filter(Boolean);return a.length?round1(a.reduce((x,y)=>x+y,0)/a.length):0;}
 
@@ -185,7 +187,7 @@ function questPanel(){
   <div class="step-body">${[stepTopic,stepTranscript,stepScores,stepReflect][st]()}</div>
   <div class="step-foot">${st?`<button class="secondary" data-step="${st-1}">← Back</button>`:''}${st<3?`<button class="primary" data-step="${st+1}">Next →</button>`:'<button class="primary" id="complete">Complete quest ✨</button>'}</div></div>`;
 }
-function stepTopic(){const tier=WHEEL_TIERS[challenge.difficulty-1];return `<div class="topic-box" style="--tier:${tier[1]}"><span>${tier[0].toUpperCase()} · LEVEL ${challenge.difficulty}/7</span><h3>${challenge.topic}</h3><div class="chips"><b>🧠 ${prep()}s prep</b><b>🎙 ${state.duration} min target</b></div></div>${!challenge.rerolled?'<button class="secondary" id="reroll">↻ Use free reroll</button>':''}<p class="muted">Take ${prep()} seconds to prepare, then speak for about ${state.duration} minutes. Transcribe it for the next step.</p>`;}
+function stepTopic(){const tier=WHEEL_TIERS[challenge.difficulty-1];return `<div class="topic-box" style="--tier:${tier[1]}"><span>${tier[0].toUpperCase()} · LEVEL ${challenge.difficulty}/7</span><h3>${challenge.topic}</h3><div class="chips"><b><i class="px-icon brain" aria-hidden="true"></i>${prep()}s prep</b><b><i class="px-icon mic light" aria-hidden="true"></i>${state.duration} min target</b></div></div>${!challenge.rerolled?'<button class="secondary" id="reroll">↻ Use free reroll</button>':''}<p class="muted">Take ${prep()} seconds to prepare, then speak for about ${state.duration} minutes. Transcribe it for the next step.</p>`;}
 function stepTranscript(){return `<label class="grow">Transcript<textarea id="transcript" placeholder="Paste your transcript here...">${esc(challenge.transcript)}</textarea></label><button class="secondary" id="copy-prompt">Copy friendly-mentor prompt</button><label class="grow">AI feedback<textarea id="feedback" placeholder="Paste the coach feedback here...">${esc(challenge.feedback)}</textarea></label>`;}
 function stepScores(){return `<p class="muted">Copy the scores from the AI feedback. Overall is required.</p><div class="score-grid">${[...SKILLS,'overall'].map(s=>`<label class="score-input${s==='overall'?' overall':''}"><span>${LABEL[s]}</span><input data-score="${s}" type="number" min="1" max="10" step="0.5" value="${challenge.scores[s]||''}"><small>/10</small></label>`).join('')}</div>`;}
 function stepReflect(){return `<h3 class="form-title">How did it feel?</h3>${['confidence','fluency','satisfaction'].map(s=>`<label class="range"><span>${cap(s)} <b>${challenge.self[s]}/10</b></span><input data-self="${s}" type="range" min="1" max="10" value="${challenge.self[s]}"></label>`).join('')}`;}
@@ -243,15 +245,26 @@ function progressPanel(){return `
 let histPage=0, histPer=6, histSel=null;
 function journalPanel(){
   const all=state.history;
-  if(!all.length)return `<div class="empty-note">Complete your first quest to start your speaking journal.</div>`;
+  if(!all.length)return `${monthCalendar()}<div class="empty-note">Complete your first quest to start your speaking journal.</div>`;
   const sel=all.find(h=>h.id===histSel);
   if(sel)return histDetail(sel);
+  const cal=monthCalendar();
   const pages=Math.max(1,Math.ceil(all.length/histPer));histPage=clamp(histPage,0,pages-1);
   const rows=all.slice(histPage*histPer,(histPage+1)*histPer);
-  return `<div class="hist-list"><div class="hist-rows">${rows.map(h=>`<button class="hist-row" data-hist="${h.id}"><span><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}</span><b>${esc(h.topic)}</b></span><span class="score">${h.scores.overall}</span></button>`).join('')}</div>
+  return `${cal}<div class="hist-list"><div class="hist-rows">${rows.map(h=>`<button class="hist-row" data-hist="${h.id}"><span><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}</span><b>${esc(h.topic)}</b></span><span class="score">${h.scores.overall}</span></button>`).join('')}</div>
   <div class="pager"><button class="secondary" data-hist-page="-1" ${histPage?'':'disabled'}>←</button><span>${histPage+1} / ${pages}</span><button class="secondary" data-hist-page="1" ${histPage<pages-1?'':'disabled'}>→</button></div></div>`;
 }
-function histDetail(h){return `<div class="hist-detail"><div class="detail-head"><button class="mini back" data-hist-back>← All sessions</button><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}</span><h3>${esc(h.topic)}</h3><div class="chips"><b>🎯 ${h.scores.overall}/10</b><b>⭐ +${h.earnedXP} XP</b><b>${COIN}+${h.earnedCoins}</b><b>🎙 ${h.duration} min</b></div><div class="score-chips">${SKILLS.map(s=>`<span>${LABEL[s]} <b>${h.scores[s]||'—'}</b></span>`).join('')}</div></div><div class="detail-text"><h4>Transcript</h4><p class="pre">${esc(h.transcript)}</p></div><div class="detail-text"><h4>AI feedback</h4><p class="pre">${esc(h.feedback||'No feedback saved.')}</p></div></div>`;}
+function histDetail(h){return `<div class="hist-detail"><div class="detail-head"><button class="mini back" data-hist-back>← All sessions</button><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}</span><h3>${esc(h.topic)}</h3><div class="chips"><b>🎯 ${h.scores.overall}/10</b><b>⭐ +${h.earnedXP} XP</b><b>${COIN}+${h.earnedCoins}</b><b><i class="px-icon mic light" aria-hidden="true"></i>${h.duration} min</b></div><div class="score-chips">${SKILLS.map(s=>`<span>${LABEL[s]} <b>${h.scores[s]||'—'}</b></span>`).join('')}</div></div><div class="detail-text"><h4>Transcript</h4><p class="pre">${esc(h.transcript)}</p></div><div class="detail-text"><h4>AI feedback</h4><p class="pre">${esc(h.feedback||'No feedback saved.')}</p></div></div>`;}
+// This month at a glance: days with a completed daily quest are filled in.
+function monthCalendar(){
+  const now=new Date(),y=now.getFullYear(),m=now.getMonth(),days=new Date(y,m+1,0).getDate(),lead=(new Date(y,m,1).getDay()+6)%7;
+  const done=new Set(state.history.filter(h=>h.isDaily).map(h=>h.date)),t=today();
+  const cells=[...Array(lead).fill('<span></span>'),...Array.from({length:days},(_,i)=>{const key=ymd(new Date(y,m,i+1));
+    return `<span class="${done.has(key)?'done':''}${key===t?' today':''}" title="${key}${done.has(key)?' · daily quest done':''}">${i+1}</span>`;})];
+  const count=[...done].filter(d=>d.startsWith(`${y}-${String(m+1).padStart(2,'0')}`)).length;
+  return `<section class="cal"><div class="cal-head"><h3>${now.toLocaleString(undefined,{month:'long'})} ${y}</h3><span>${count} daily ${count===1?'quest':'quests'}</span></div>
+  <div class="cal-grid">${['M','T','W','T','F','S','S'].map(d=>`<b>${d}</b>`).join('')}${cells.join('')}</div></section>`;
+}
 // Rows have a fixed height, so the page size is however many fit in the list.
 function fitHistory(){const box=$('.hist-rows');if(!box)return;const per=Math.max(1,Math.floor((box.clientHeight+6)/64));if(per!==histPer){histPer=per;$('.panel').innerHTML=panelView();bindPanel();}}
 

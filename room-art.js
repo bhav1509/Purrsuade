@@ -362,8 +362,10 @@ const wheelBuf=document.createElement('canvas');wheelBuf.width=wheelBuf.height=9
 function wheelTierAt(rot){const a=((-Math.PI/2-rot)%(Math.PI*2)+Math.PI*4)%(Math.PI*2);return Math.floor(a/WHEEL_SEG)%WHEEL_TIERS.length;}
 // Rotation that parks the pointer inside segment `i` (with a little jitter so it isn't always dead centre).
 function wheelRotFor(i,jitter=0){return -Math.PI/2-(i+.5+jitter)*WHEEL_SEG;}
+const wheelTop=document.createElement('canvas');wheelTop.width=wheelTop.height=96;
 function drawCatWheel(canvas,rot,coat,anim,animT){
-  const b=wheelBuf.getContext('2d'),cx=48,cy=46,R=38;b.clearRect(0,0,96,96);
+  const b=wheelBuf.getContext('2d'),t=wheelTop.getContext('2d'),cx=48,cy=46,R=38;
+  b.clearRect(0,0,96,96);t.clearRect(0,0,96,96);
   // stand
   b.fillStyle='#2a1f35';b.fillRect(cx-22,cy+R-6,6,18);b.fillRect(cx+16,cy+R-6,6,18);b.fillRect(cx-28,cy+R+10,56,4);
   b.fillStyle='#5c4d91';b.fillRect(cx-21,cy+R-5,4,15);b.fillRect(cx+17,cy+R-5,4,15);
@@ -375,14 +377,21 @@ function drawCatWheel(canvas,rot,coat,anim,animT){
   b.fillStyle='#d6c9ff';for(let i=0;i<14;i++){const a=i*Math.PI/7;b.fillRect(Math.round(Math.cos(a)*(R-1))-1,Math.round(Math.sin(a)*(R-1))-1,2,2);}
   b.restore();
   b.fillStyle='#2a1f35';b.fillRect(cx-4,cy-4,8,8);b.fillStyle='#d6c9ff';b.fillRect(cx-2,cy-2,4,4);
-  // cat running on the inside of the rim
+  // cat running on the inside of the rim, and the pointer, go on a top layer above the labels
   if(roomImagesLoaded){const c=CAT_ATLAS.cats[coat]||CAT_ATLAS.cats[CAT_COATS[0]],a=c.animations[anim];
     let i=Math.floor(animT*a.fps);i=a.loop?i%a.frames:Math.min(i,a.frames-1);const [sx,sy,w,h]=a.rects[i];
-    b.drawImage(atlasImage,sx,sy,w,h,cx-16,cy+R-4-29,w,h);}
-  // pointer
-  b.fillStyle='#2a1f35';b.fillRect(cx-6,0,12,3);b.fillRect(cx-5,3,10,2);b.fillRect(cx-4,5,8,2);b.fillRect(cx-3,7,6,2);b.fillRect(cx-2,9,4,2);
-  b.fillStyle='#ffe39a';b.fillRect(cx-4,1,8,2);b.fillRect(cx-3,3,6,2);b.fillRect(cx-2,5,4,2);b.fillRect(cx-1,7,2,2);
+    t.drawImage(atlasImage,sx,sy,w,h,cx-16,cy+R-4-29,w,h);}
+  t.fillStyle='#2a1f35';t.fillRect(cx-6,0,12,3);t.fillRect(cx-5,3,10,2);t.fillRect(cx-4,5,8,2);t.fillRect(cx-3,7,6,2);t.fillRect(cx-2,9,4,2);
+  t.fillStyle='#ffe39a';t.fillRect(cx-4,1,8,2);t.fillRect(cx-3,3,6,2);t.fillRect(cx-2,5,4,2);t.fillRect(cx-1,7,2,2);
+
   const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,canvas.width,canvas.height);
-  const k=Math.max(1,Math.floor(Math.min(canvas.width,canvas.height)/96));
-  ctx.drawImage(wheelBuf,Math.round((canvas.width-96*k)/2),Math.round((canvas.height-96*k)/2),96*k,96*k);
+  const k=Math.max(1,Math.floor(Math.min(canvas.width,canvas.height)/96)),ox=Math.round((canvas.width-96*k)/2),oy=Math.round((canvas.height-96*k)/2);
+  ctx.drawImage(wheelBuf,ox,oy,96*k,96*k);
+  // Category names along each segment, kept upright so none read upside down.
+  ctx.save();ctx.translate(ox+cx*k,oy+cy*k);ctx.font=`${Math.round(6.5*k)}px 'Jersey 10', monospace`;ctx.textBaseline='middle';ctx.fillStyle='rgba(29,24,48,.88)';
+  const r0=R*.34*k,r1=R*.9*k;
+  WHEEL_TIERS.forEach(([name],i)=>{const mid=rot+(i+.5)*WHEEL_SEG,flip=Math.cos(mid)<0;
+    ctx.save();ctx.rotate(flip?mid+Math.PI:mid);ctx.textAlign=flip?'left':'right';ctx.fillText(name,flip?-r1:r1,0,r1-r0);ctx.restore();});
+  ctx.restore();
+  ctx.drawImage(wheelTop,ox,oy,96*k,96*k);
 }
