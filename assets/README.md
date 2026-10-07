@@ -2,7 +2,9 @@
 
 - `cat-game-atlas.png` / `cat-game-atlas.js`: the Cat Game Pixel Pack atlas (original art, free to use).
   The `.js` file is the pack's `cat_game_atlas.json` wrapped as `const CAT_ATLAS=…` so it also works
-  when `index.html` is opened directly from disk. Regenerate it if you replace the atlas.
+  when `index.html` is opened directly from disk. Both are copied from the original pack in
+  `../cat-game-pack/` (loose sprites, previews and the Python generators live there); re-copy and
+  regenerate the `.js` if the pack changes.
 - 9 cat coats, each with idle / sit / walk / run / sleep / jump / box / play animations (32×32, feet at 16,29).
 - The room layout (style, furniture, wall decor, cat spots) lives in `ROOM` and `SPOT` in `room-art.js`.
   Any sprite name from the atlas can be swapped in there.

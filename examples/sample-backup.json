@@ -1,0 +1,92 @@
+{
+  "xp": 185,
+  "coins": 45,
+  "streak": 1,
+  "lastDaily": "2026-01-10",
+  "duration": 2,
+  "room": "mint_tile",
+  "transcriber": "whisper",
+  "layout": {
+    "bed": [
+      60,
+      70
+    ],
+    "cushion": [
+      150,
+      120
+    ]
+  },
+  "history": [
+    {
+      "topic": "Describe your ideal weekend and what makes it enjoyable. Use one specific example.",
+      "difficulty": 1,
+      "rerolled": false,
+      "transcript": "My ideal weekend is slow in the morning and social in the afternoon. I like to wake up without an alarm and then walk to a small bakery near my place and get a coffee. And then in the afternoon I usually meet a friend, and then we go for a walk by the river. In the evening I like to cook something simple and read for a bit. I think it works because I get a bit of quiet time and a bit of time with people.",
+      "feedback": "Clear, friendly answer with a good opening, but the middle wanders and a few sentences restart.\n\nArea\tScore\nClarity\t7/10\nStructure\t6/10\nConfidence\t7/10\nVocabulary\t6/10\nConciseness\t6/10\nGrammar\t8/10\nOverall\t7/10\n\n1. Three specific strengths\n- You opened with a clear one-line answer.\n- The bakery example made it concrete.\n- Your tone sounded relaxed and natural.\n\n2. Three specific improvements\n- Group your points: morning, afternoon, evening.\n- Cut repeated phrases like \"and then\".\n- End with one line that sums up why it works for you.\n\n3. A stronger structure\nAnswer → three parts of the day → why it recharges you.\n\n4. Short improved example\nMy ideal weekend is slow in the morning, social in the afternoon and quiet in the evening...\n\n5. Focus for next time\nFinish each idea before starting the next.\n\nSCORES: clarity=7; structure=6; confidence=7; vocabulary=6; conciseness=6; grammar=8; overall=7",
+      "scores": {
+        "clarity": 7,
+        "structure": 6,
+        "confidence": 7,
+        "vocabulary": 6,
+        "conciseness": 6,
+        "grammar": 8,
+        "overall": 7
+      },
+      "self": {
+        "confidence": 6,
+        "fluency": 5,
+        "satisfaction": 6
+      },
+      "spokeSec": 118,
+      "id": 1768050000000,
+      "date": "2026-01-10",
+      "isDaily": true,
+      "earnedXP": 185,
+      "earnedCoins": 60,
+      "duration": 2,
+      "prep": 60
+    },
+    {
+      "topic": "Talk about a skill you would like to learn. Keep your answer concise and avoid filler.",
+      "difficulty": 1,
+      "rerolled": false,
+      "transcript": "I'd really like to learn to play the piano properly. I tried a little as a kid but stopped.",
+      "feedback": "",
+      "scores": {
+        "clarity": 0,
+        "structure": 0,
+        "confidence": 0,
+        "vocabulary": 0,
+        "conciseness": 0,
+        "grammar": 0,
+        "overall": 0
+      },
+      "self": {
+        "confidence": 5,
+        "fluency": 5,
+        "satisfaction": 5
+      },
+      "spokeSec": 41,
+      "id": 1767960000000,
+      "date": "2026-01-09",
+      "isDaily": true,
+      "incomplete": true,
+      "earnedXP": 0,
+      "earnedCoins": 0,
+      "duration": 2,
+      "prep": 60
+    }
+  ],
+  "cat": {
+    "name": "Biscuit",
+    "coat": "orange_tabby",
+    "hunger": 74,
+    "thirst": 68,
+    "cleanliness": 81,
+    "happiness": 88,
+    "lastUpdated": 1768060000000,
+    "criticalSince": null,
+    "alive": true
+  },
+  "version": 1
+}

@@ -16,14 +16,37 @@ const NEED_ICONS={hunger:'bowl_sky_empty',thirst:'bowl_blush_water',cleanliness:
 
 const ROOM={
   walls:[['window_curtain_rose_left',40,50],['art_plant_left',122,66],['art_heart_left',150,74],['window_blind_white_right',30,54],['art_cat_right',100,80],['art_waves_right',124,90],['wall_clock_blue_right',150,96]],
-  rug:['rug_sage',100,104],
-  // [sprite, x, y, z, shadow radius]
-  furniture:[['plant_big_sky',16,18,0,9],['shelf_sage',128,2,0,0],['plant_small_blush',150,9,62,0],['treat_jar_pink',136,9,42,0],['basket_bed_sage',54,54,0,19],['scratch_post_oak',28,150,0,11],['floor_lamp_cream',10,112,0,7],['floor_cushion_lavender',170,118,0,9]],
-  litter:[160,62],food:[124,160],water:[150,146],yarn:[84,132],
 };
-// Where the cat stands for each spot: [x, y, z, face left].
-const SPOT={bed:[54,54,4,false],rug:[100,104,0,false],window:[24,74,0,true],cushion:[150,112,0,true],
-  food:[118,162,0,false],water:[144,148,0,false],litter:[160,62,3,false],yarn:[78,132,0,false]};
+// Everything on the floor can be moved in arrange mode. [x, y] is the default spot; `pad` keeps the
+// footprint inside the room; `spot` is where the cat stands to use it ([dx, dy, z, face left]);
+// `carries` are items that sit on top and move with it ([sprite, dx, dy, z]).
+const ROOM_ITEMS=[
+  {id:'rug',sprite:'rug_sage',x:100,y:104,pad:30,flat:true,spot:[0,0,0,false]},
+  {id:'plant',sprite:'plant_big_sky',x:16,y:18,pad:8,shadow:9},
+  {id:'shelf',sprite:'shelf_sage',x:128,y:2,pad:2,carries:[['plant_small_blush',22,7,62],['treat_jar_pink',12,11,62]]},
+  {id:'bed',sprite:'basket_bed_sage',x:54,y:54,pad:16,shadow:19,spot:[0,0,4,false]},
+  {id:'post',sprite:'scratch_post_oak',x:28,y:150,pad:9,shadow:11},
+  {id:'lamp',sprite:'floor_lamp_cream',x:10,y:112,pad:6,shadow:7},
+  {id:'cushion',sprite:'floor_cushion_lavender',x:170,y:118,pad:9,shadow:9,spot:[-20,-6,0,true]},
+  {id:'litter',sprite:'litter_tray_mint',x:160,y:62,pad:14,spot:[0,0,3,false]},
+  {id:'food',sprite:c=>c.hunger>20?'bowl_sky_kibble':'bowl_sky_empty',x:124,y:160,pad:6,shadow:6,spot:[-6,2,0,false]},
+  {id:'water',sprite:c=>c.thirst>20?'bowl_blush_water':'bowl_blush_empty',x:150,y:146,pad:6,shadow:6,spot:[-6,2,0,false]},
+  {id:'yarn',sprite:'toy_yarn_pink',x:84,y:132,pad:4,spot:[-6,0,0,false]},
+];
+// Where the cat stands for each spot: [x, y, z, face left]. Item spots follow the layout.
+const SPOT={window:[24,74,0,true]};
+let roomLayout={};
+const itemPos=it=>roomLayout[it.id]||[it.x,it.y];
+function updateSpots(){
+  const fix=v=>Math.max(4,Math.min(176,v));
+  for(const it of ROOM_ITEMS){if(!it.spot)continue;const [x,y]=itemPos(it),[dx,dy,z,f]=it.spot;SPOT[it.id]=[fix(x+dx),fix(y+dy),z,f];}
+}
+// Saved positions from the app ({id: [x, y]}). The cat walks to the new spots on its next move.
+function setRoomLayout(layout,time){
+  roomLayout=layout||{};updateSpots();
+  if(time!=null&&catPlan){const p=poseAt(catPlan,time);catPlan=buildPlan(time,[p.x,p.y,p.z,p.flip],[{to:'bed'},{at:'bed',anim:'idle',dur:.5}],false);planReaction=null;}
+}
+updateSpots();
 
 let roomStyle=ROOM_STYLES[0];
 const project=(x,y,z=0)=>{const [ox,oy]=CAT_ATLAS.rooms[roomStyle].floorOrigin;return [ox+x-y,oy+(x+y)/2-z];};
@@ -52,7 +75,6 @@ function getStaticLayer(){
   const ctx=c.getContext('2d');ctx.imageSmoothingEnabled=false;
   ctx.drawImage(atlasImage,r.x,r.y,r.w,r.h,0,0,r.w,r.h);
   ROOM.walls.forEach(([n,a,z])=>drawWallItem(ctx,n,a,z));
-  drawSprite(ctx,...ROOM.rug);
   return staticLayers[roomStyle]=c;
 }
 
@@ -213,20 +235,24 @@ function focusCat(canvas,{zoom=2.25,instant=false,onChange}={}){
   step();
 }
 // Drag to pan; two-finger pinch to zoom when `pinch` is on. A press that barely moves is a tap.
-function enableRoomCamera(canvas,{pinch,onTap,onChange,resetButton,zoomIn,zoomOut}){
+// `grab(e)` may claim a press (arrange mode) by returning {move, end}; otherwise the press pans.
+function enableRoomCamera(canvas,{pinch,onTap,onChange,resetButton,zoomIn,zoomOut,grab}){
   const cam=camFor(canvas);if(!cam)return;
-  const pts=new Map();let start=null,moved=false;
+  const pts=new Map();let start=null,moved=false,held=null;
   let sync=()=>{if(resetButton)resetButton.hidden=camIsHome(cam);onChange?.();};
   const snap=()=>{const p=[...pts.values()],two=p.length>1;
     return {x:two?(p[0].x+p[1].x)/2:p[0].x,y:two?(p[0].y+p[1].y)/2:p[0].y,d:two?Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y):0,camX:cam.x,camY:cam.y,zoom:cam.zoom};};
   canvas.style.touchAction='none';
   canvas.onpointerdown=e=>{
     try{canvas.setPointerCapture(e.pointerId);}catch{}pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    if(pts.size===1)moved=false;start=snap();canvas.classList.add('dragging');
+    if(pts.size===1){moved=false;held=grab?.(e)||null;}else if(held){held.end();held=null;}
+    start=snap();canvas.classList.add('dragging');
   };
   canvas.onpointermove=e=>{
-    if(!pts.has(e.pointerId)){canvas.style.cursor=catHit(canvas,e.clientX,e.clientY)?'pointer':'';return;}
-    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});const now=snap();
+    if(!pts.has(e.pointerId)){canvas.style.cursor=arrange.on?(itemAt(canvas,e.clientX,e.clientY)?'grab':''):catHit(canvas,e.clientX,e.clientY)?'pointer':'';return;}
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(held){moved=true;held.move(e);onChange?.();return;}
+    const now=snap();
     if(pts.size>1){
       if(!pinch||!start.d)return;
       // Zoom about the pinch midpoint so the spot under the fingers stays put.
@@ -241,6 +267,7 @@ function enableRoomCamera(canvas,{pinch,onTap,onChange,resetButton,zoomIn,zoomOu
   };
   const end=(e,tap)=>{
     if(!pts.has(e.pointerId))return;pts.delete(e.pointerId);
+    if(held){held.end();held=null;}
     if(pts.size){start=snap();return;}
     canvas.classList.remove('dragging');if(tap&&!moved)onTap?.(e);
   };
@@ -253,6 +280,61 @@ function enableRoomCamera(canvas,{pinch,onTap,onChange,resetButton,zoomIn,zoomOu
   const baseSync=sync;sync=()=>{baseSync();if(zoomIn)zoomIn.disabled=cam.zoom>=MAX_ZOOM;if(zoomOut)zoomOut.disabled=cam.zoom<=1;};
   canvas._camSync=sync;
   sync();
+}
+
+// ---- Garden: a floating grass island around the room, drawn once in room-space pixels ----
+// The layer is larger than the room sprite by GARDEN_PAD on each side; the room is drawn on top of it.
+const GARDEN_PAD={x:200,top:20,bottom:110},GARDEN_G=100;
+let gardenLayer=null,gardenTint={night:-1,canvas:null};
+function hash(n){n=Math.sin(n*127.1+311.7)*43758.5453;return n-Math.floor(n);}
+function pixelBlob(ctx,X,Y,rx,ry,col){for(let dy=-ry;dy<=ry;dy++){const h=Math.round(rx*Math.sqrt(Math.max(0,1-(dy/ry)**2)));ctx.fillStyle=col;ctx.fillRect(Math.round(X)-h,Math.round(Y)+dy,h*2,1);}}
+function buildGarden(){
+  const rm=CAT_ATLAS.rooms[roomStyle],P=GARDEN_PAD,c=document.createElement('canvas');
+  c.width=rm.w+P.x*2;c.height=rm.h+P.top+P.bottom;const g=c.getContext('2d');g.translate(P.x,P.top);
+  const G=GARDEN_G,[ox,oy]=rm.floorOrigin,top=oy-G,bot=oy+180+G,mid=(top+bot)/2,T=12;
+  // island sides: soil under the front-left and front-right edges
+  for(let y=Math.round(mid);y<=bot+T;y++){const k=Math.max(0,bot-y),hw=2*Math.min(bot-mid,k+T);
+    const hwTop=2*Math.max(0,bot-y);g.fillStyle='#8a6646';g.fillRect(ox-hw,y,hw-hwTop,1);g.fillStyle='#a07a55';g.fillRect(ox+hwTop,y,hw-hwTop,1);}
+  for(let i=0;i<260;i++){const t=hash(i+.3),side=t<.5?-1:1,u=hash(i+9.1),y=mid+u*(bot-mid),hw=2*(bot-y),dy=hash(i+4.2)*T;
+    g.fillStyle=hash(i+2)<.5?'#74553a':'#b58c63';g.fillRect(Math.round(ox+side*(hw+hash(i+7)*0)-(side<0?1:0)*2),Math.round(y+2+dy),2,1);}
+  // grass top, a pixel row at a time so the diamond edges stay crisp
+  for(let y=top;y<=bot;y++){const hw=2*Math.min(y-top,bot-y);g.fillStyle='#9ccf7f';g.fillRect(ox-hw,y,hw*2,1);}
+  // grass fringe hanging over the soil edge
+  for(let i=0;i<120;i++){const u=hash(i+20.5),y=mid+u*(bot-mid),hw=2*(bot-y),side=hash(i+3.3)<.5?-1:1;g.fillStyle='#7fb86a';g.fillRect(Math.round(ox+side*hw)-1,Math.round(y)+1,2,1+Math.floor(hash(i+5)*3));}
+  const inside=(x,y)=>x>-G+4&&y>-G+4&&x<180+G-4&&y<180+G-4,inRoom=(x,y)=>x>-6&&y>-6&&x<186&&y<186;
+  // soft shadow where the room sits on the grass
+  for(let y=oy;y<=oy+180+8;y++){const hw=2*Math.min(y-oy,oy+188-y);g.fillStyle='#86bb6c';g.fillRect(ox-hw-6,y+4,hw*2+12,1);}
+  // texture: light and dark tufts
+  for(let i=0;i<1400;i++){const x=-G+hash(i)*(180+2*G),y=-G+hash(i+.5)*(180+2*G);if(!inside(x,y)||inRoom(x,y))continue;
+    const [X,Y]=project(x,y),dark=hash(i+.9)<.55;g.fillStyle=dark?'#7fb86a':'#b5dd8f';
+    g.fillRect(Math.round(X),Math.round(Y),1,1);if(dark){g.fillRect(Math.round(X)-1,Math.round(Y)-1,1,1);g.fillRect(Math.round(X)+1,Math.round(Y)-1,1,1);}}
+  // stepping-stone path out from the front of the room
+  for(let k=0;k<5;k++){const t=196+k*15,[X,Y]=project(t+(k%2?3:-3),t);pixelBlob(g,X,Y+1,6,2,'#7d8a74');pixelBlob(g,X,Y,6,2,'#d9d2c3');g.fillStyle='#ece6da';g.fillRect(Math.round(X)-3,Math.round(Y)-1,3,1);}
+  // pond
+  {const [X,Y]=project(250,140);pixelBlob(g,X,Y,19,9,'#6f9f5c');pixelBlob(g,X,Y,17,8,'#87b9d8');pixelBlob(g,X+2,Y+1,13,6,'#9fcde6');g.fillStyle='#e6f4f8';g.fillRect(Math.round(X)-8,Math.round(Y)-3,5,1);g.fillRect(Math.round(X)+5,Math.round(Y)+2,3,1);
+    pixelBlob(g,X+10,Y-2,3,1,'#6cc08e');}
+  // flowers
+  const FL=['#ff9ec4','#ffe39a','#fbf6ee','#b4a2ff'];
+  for(let i=0;i<170;i++){const x=-G+hash(i+50)*(180+2*G),y=-G+hash(i+51)*(180+2*G);if(!inside(x,y)||inRoom(x,y))continue;const [X,Y]=project(x,y);
+    if(Math.abs(X-ox)<9&&Y>oy+190)continue;const col=FL[i%4];g.fillStyle='#5d9a4c';g.fillRect(Math.round(X),Math.round(Y),1,2);
+    g.fillStyle=col;g.fillRect(Math.round(X)-1,Math.round(Y)-1,3,1);g.fillRect(Math.round(X),Math.round(Y)-2,1,3);g.fillStyle='#ffe39a';if(col!=='#ffe39a')g.fillRect(Math.round(X),Math.round(Y)-1,1,1);}
+  // bushes
+  const bush=(x,y,rr,berry)=>{const [X,Y]=project(x,y);pixelBlob(g,X,Y,rr+2,Math.ceil(rr/2),'#6f9f5c');pixelBlob(g,X,Y-rr+1,rr+1,rr,'#4f8a49');pixelBlob(g,X-1,Y-rr,rr,rr-1,'#6cae5c');pixelBlob(g,X-3,Y-rr-3,rr-4,rr-5,'#8fcd73');
+    if(berry)for(let j=0;j<5;j++){g.fillStyle=berry;g.fillRect(Math.round(X-rr+2+hash(j+x)*(rr*2-4)),Math.round(Y-rr*1.6+hash(j+y)*rr*1.3),2,2);}};
+  bush(205,150,8,'#ff9ec4');bush(155,210,9);bush(232,58,7,'#fbf6ee');bush(60,228,8,'#ffe39a');bush(245,205,6);bush(208,96,6);
+  // trees at the island's side corners
+  const tree=(x,y,h)=>{const [X,Y]=project(x,y);pixelBlob(g,X,Y,10,4,'#6f9f5c');g.fillStyle='#7a5a3f';g.fillRect(Math.round(X)-2,Math.round(Y)-h,4,h);g.fillStyle='#9a7650';g.fillRect(Math.round(X)-2,Math.round(Y)-h,1,h);
+    const cy=Y-h-6;pixelBlob(g,X,cy+2,15,12,'#3f7a45');pixelBlob(g,X-1,cy,14,11,'#5a9a52');pixelBlob(g,X-4,cy-4,9,7,'#7cbd66');pixelBlob(g,X-6,cy-7,4,3,'#a3d98a');};
+  tree(-40,205,20);tree(205,-40,22);tree(-20,250,16);
+  return c;
+}
+function gardenFor(night){
+  if(!gardenLayer||gardenLayer._style!==roomStyle){gardenLayer=buildGarden();gardenLayer._style=roomStyle;gardenTint.night=-1;}
+  if(night<=0)return gardenLayer;
+  const n=Math.round(night*20)/20;
+  if(gardenTint.night!==n||gardenTint.style!==roomStyle){const c=gardenTint.canvas||(gardenTint.canvas=document.createElement('canvas'));c.width=gardenLayer.width;c.height=gardenLayer.height;
+    const x=c.getContext('2d');x.drawImage(gardenLayer,0,0);x.globalCompositeOperation='source-atop';x.fillStyle=`rgba(38,30,86,${.5*n})`;x.fillRect(0,0,c.width,c.height);gardenTint.night=n;gardenTint.style=roomStyle;}
+  return gardenTint.canvas;
 }
 
 const roomBuf=document.createElement('canvas'),glowBuf=document.createElement('canvas');
@@ -270,12 +352,17 @@ function drawRoom(canvas,time,cat,reaction,style){
 
   const pose=cat.alive?currentPose(time,cat,reaction):null;
   // Everything on the floor is depth-sorted by x + y (further back first).
-  const items=ROOM.furniture.map(([n,x,y,z,sh],i)=>({depth:x+y+z/100+i/1000,draw:()=>{drawShadow(b,x,y,0,sh);drawSprite(b,n,x,y,z);}}));
-  const [lx,ly]=ROOM.litter,[fx,fy]=ROOM.food,[wx,wy]=ROOM.water,[yx,yy]=ROOM.yarn;
-  items.push({depth:lx+ly,draw:()=>{drawSprite(b,'litter_tray_mint',lx,ly);if(cat.cleanliness<35)drawLitterMess(b,lx,ly);}});
-  items.push({depth:fx+fy,draw:()=>{drawShadow(b,fx,fy,0,6);drawSprite(b,cat.hunger>20?'bowl_sky_kibble':'bowl_sky_empty',fx,fy);}});
-  items.push({depth:wx+wy,draw:()=>{drawShadow(b,wx,wy,0,6);drawSprite(b,cat.thirst>20?'bowl_blush_water':'bowl_blush_empty',wx,wy);}});
-  if(!pose?.hideYarn)items.push({depth:yx+yy,draw:()=>drawSprite(b,'toy_yarn_pink',yx,yy)});
+  // Arrange mode: a faint floor grid, and a footprint under the item being moved.
+  if(arrange.on){drawFloorGrid(b);if(arrange.drag){const it=ROOM_ITEMS.find(i=>i.id===arrange.drag),[x,y]=itemPos(it);drawFootprint(b,x,y,Math.max(6,it.pad));}}
+  // Rugs lie flat under everything; the rest is depth-sorted by x + y (further back first).
+  const items=[];
+  ROOM_ITEMS.forEach((it,i)=>{
+    if(it.id==='yarn'&&pose?.hideYarn)return;
+    const [x,y]=itemPos(it),lift=arrange.drag===it.id?3:0,name=typeof it.sprite==='function'?it.sprite(cat):it.sprite;
+    const draw=()=>{drawShadow(b,x,y,0,it.shadow);drawSprite(b,name,x,y,lift);(it.carries||[]).forEach(([n,dx,dy,z])=>drawSprite(b,n,x+dx,y+dy,z+lift));
+      if(it.id==='litter'&&cat.cleanliness<35)drawLitterMess(b,x,y);};
+    if(it.flat)draw();else items.push({depth:x+y+i/1000+(lift?400:0),draw});
+  });
   let catXY=null;
   if(pose){
     // Small bias keeps the cat in front of the bed / litter tray it is sitting in.
@@ -292,7 +379,7 @@ function drawRoom(canvas,time,cat,reaction,style){
   if(night>0){
     b.globalCompositeOperation='source-atop';
     b.fillStyle=`rgba(38,30,86,${.42*night})`;b.fillRect(0,0,rm.w,rm.h);
-    const [lx2,ly2]=project(10,112,88),glow=b.createRadialGradient(lx2,ly2,4,lx2,ly2,120);
+    const [lpx,lpy]=itemPos(ROOM_ITEMS.find(i=>i.id==='lamp')),[lx2,ly2]=project(lpx,lpy,88),glow=b.createRadialGradient(lx2,ly2,4,lx2,ly2,120);
     glow.addColorStop(0,`rgba(255,214,150,${.5*night})`);glow.addColorStop(.45,`rgba(255,190,130,${.18*night})`);glow.addColorStop(1,'rgba(255,190,130,0)');
     // Mask the light to the room's own pixels, then add it, so nothing glows outside the room.
     if(glowBuf.width!==rm.w||glowBuf.height!==rm.h){glowBuf.width=rm.w;glowBuf.height=rm.h;}
@@ -312,12 +399,59 @@ function drawRoom(canvas,time,cat,reaction,style){
     canvas._cat={x:view.x+(X-13)*view.scale,y:view.y+(Y-27)*view.scale,w:26*view.scale,h:28*view.scale};
   }
   ctx.imageSmoothingEnabled=false;
+  const gl=gardenFor(night),P=GARDEN_PAD;
+  ctx.drawImage(gl,Math.round(view.x-P.x*view.scale),Math.round(view.y-P.top*view.scale),Math.round(gl.width*view.scale),Math.round(gl.height*view.scale));
   ctx.drawImage(roomBuf,view.x,view.y,Math.round(rm.w*view.scale),Math.round(rm.h*view.scale));
 }
 function drawLitterMess(ctx,x,y){
   const [X,Y]=project(x,y);ctx.fillStyle='#8e7967';
   [[-10,-4],[3,-2],[9,-7],[-3,-8]].forEach(([dx,dy])=>ctx.fillRect(Math.round(X)+dx,Math.round(Y)+dy,2,2));
 }
+// ---- Arrange mode: drag floor items around; positions snap to a 2-unit grid inside the room ----
+const arrange={on:false,drag:null};
+function drawFloorGrid(ctx){
+  ctx.fillStyle='rgba(255,255,255,.22)';
+  for(let k=20;k<180;k+=20)for(let t=0;t<=180;t+=2){let [X,Y]=project(k,t);ctx.fillRect(Math.round(X),Math.round(Y),1,1);[X,Y]=project(t,k);ctx.fillRect(Math.round(X),Math.round(Y),1,1);}
+}
+function drawFootprint(ctx,x,y,r){
+  ctx.fillStyle='rgba(143,224,188,.45)';
+  for(let t=-r;t<=r;t+=.5)for(const [a,c] of [[x+t,y-r],[x+t,y+r],[x-r,y+t],[x+r,y+t]]){const [X,Y]=project(a,c);ctx.fillRect(Math.round(X),Math.round(Y),1,1);}
+}
+// Canvas pointer -> room-space pixel, and -> floor coordinates (z = 0).
+function roomPoint(canvas,clientX,clientY){
+  const v=canvas._view,rc=canvas.getBoundingClientRect();if(!v)return null;
+  const k=canvas.width/rc.width;return [((clientX-rc.left)*k-v.x)/v.scale,((clientY-rc.top)*k-v.y)/v.scale];
+}
+function floorAt(px,py){const [ox,oy]=CAT_ATLAS.rooms[roomStyle].floorOrigin,a=px-ox,c=2*(py-oy);return [(a+c)/2,(c-a)/2];}
+// Opaque-pixel test against the atlas, so a click on a bed's empty corner doesn't grab it.
+let atlasPixels=null;
+function spriteHit(name,x,y,z,px,py){
+  const s=CAT_ATLAS.sprites[name],[X,Y]=project(x,y,z),sx=Math.floor(px-(Math.round(X-s.anchor[0]))),sy=Math.floor(py-(Math.round(Y-s.anchor[1])));
+  if(sx<0||sy<0||sx>=s.w||sy>=s.h)return false;
+  if(!atlasPixels){const c=document.createElement('canvas');c.width=atlasImage.width;c.height=atlasImage.height;const x2=c.getContext('2d');x2.drawImage(atlasImage,0,0);atlasPixels=x2.getImageData(0,0,c.width,c.height);}
+  return atlasPixels.data[((s.y+sy)*atlasPixels.width+(s.x+sx))*4+3]>40;
+}
+// Front-most item under the pointer (the rug only if nothing stands on that pixel).
+function itemAt(canvas,clientX,clientY){
+  const p=roomPoint(canvas,clientX,clientY);if(!p||!roomImagesLoaded)return null;
+  const order=ROOM_ITEMS.map((it,i)=>({it,d:it.flat?-1:itemPos(it)[0]+itemPos(it)[1]+i/1000})).sort((a,c)=>c.d-a.d);
+  for(const {it} of order){const [x,y]=itemPos(it),name=typeof it.sprite==='function'?it.sprite({hunger:50,thirst:50}):it.sprite;
+    if(spriteHit(name,x,y,0,...p)||(it.carries||[]).some(([n,dx,dy,z])=>spriteHit(n,x+dx,y+dy,z,...p)))return it;}
+  return null;
+}
+// Start dragging the item under the pointer; returns move/end handlers, or null if nothing is there.
+function grabItem(canvas,e,{onMove,onDrop}={}){
+  const it=itemAt(canvas,e.clientX,e.clientY);if(!it)return null;
+  const p=roomPoint(canvas,e.clientX,e.clientY),[fx,fy]=floorAt(...p),[x0,y0]=itemPos(it),off=[x0-fx,y0-fy];
+  arrange.drag=it.id;
+  const clampTo=v=>Math.max(it.pad,Math.min(180-it.pad,Math.round(v/2)*2));
+  return {
+    move(ev){const q=roomPoint(canvas,ev.clientX,ev.clientY);if(!q)return;const [gx,gy]=floorAt(...q);
+      roomLayout={...roomLayout,[it.id]:[clampTo(gx+off[0]),clampTo(gy+off[1])]};updateSpots();onMove?.();},
+    end(){arrange.drag=null;onDrop?.(roomLayout,it.id);},
+  };
+}
+
 // Hit-test a pointer against the cat last drawn on this canvas.
 function catHit(canvas,clientX,clientY){
   const c=canvas._cat;if(!c)return false;const r=canvas.getBoundingClientRect(),k=canvas.width/r.width;
@@ -354,44 +488,59 @@ function drawRoomIcon(canvas,style){
 }
 
 // ---- Topic wheel: the cat runs inside a pixel exercise wheel; a fixed pointer marks the result ----
-// [label, bright accent for text, muted segment fill blended towards the app's plum base]
-const WHEEL_TIERS=[['Everyday','#ffb894','#c89285'],['Story','#ffe39a','#c8b18a'],['Explain','#8fe0bc','#77afa2'],['Opinion','#92cdf5','#7aa1cb'],['Workplace','#b4a2ff','#9282d2'],['Persuade','#ff9ec4','#c87fa8'],['Pressure','#ff8fa3','#c87590']];
+// Everything (backdrop, wheel, labels, cat, pointer) is drawn 1:1 into one small buffer and then scaled up
+// by a whole number, so every pixel on screen is the same size.
+// [label, segment colour (sampled from the room furniture), shade for the segment's rim band]
+const WHEEL_TIERS=[['Everyday','#d9b48c','#ad9070'],['Story','#f6e7c8','#c4b8a0'],['Explain','#bccbae','#8aa47d'],['Opinion','#87a9c5','#647c91'],['Workplace','#a9a1ca','#8078a5'],['Persuade','#e3a6a6','#b98585'],['Pressure','#6cc08e','#3f9a6e']];
 const WHEEL_SEG=Math.PI*2/WHEEL_TIERS.length;
-const wheelBuf=document.createElement('canvas');wheelBuf.width=wheelBuf.height=96;
+const WHEEL_BUF=156;
+const wheelBuf=document.createElement('canvas');wheelBuf.width=wheelBuf.height=WHEEL_BUF;
+const wheelTop=document.createElement('canvas');wheelTop.width=wheelTop.height=WHEEL_BUF;
 // Segment index under the pointer (top) for a wheel rotated by `rot` radians.
 function wheelTierAt(rot){const a=((-Math.PI/2-rot)%(Math.PI*2)+Math.PI*4)%(Math.PI*2);return Math.floor(a/WHEEL_SEG)%WHEEL_TIERS.length;}
 // Rotation that parks the pointer inside segment `i` (with a little jitter so it isn't always dead centre).
 function wheelRotFor(i,jitter=0){return -Math.PI/2-(i+.5+jitter)*WHEEL_SEG;}
-const wheelTop=document.createElement('canvas');wheelTop.width=wheelTop.height=96;
 function drawCatWheel(canvas,rot,coat,anim,animT){
-  const b=wheelBuf.getContext('2d'),t=wheelTop.getContext('2d'),cx=48,cy=46,R=38;
-  b.clearRect(0,0,96,96);t.clearRect(0,0,96,96);
+  const B=WHEEL_BUF,b=wheelBuf.getContext('2d'),t=wheelTop.getContext('2d'),cx=78,cy=78,R=58,floor=145,py=cy-R-9;
+  b.imageSmoothingEnabled=false;t.imageSmoothingEnabled=false;b.clearRect(0,0,B,B);t.clearRect(0,0,B,B);
+  // light backdrop: a slice of the room's cream wall and oak floor
+  b.fillStyle='#f3eee4';b.fillRect(0,0,B,B);
+  b.fillStyle='#e9e2d4';for(let y=6;y<floor-2;y+=12)for(let x=(y/12|0)%2*12+6;x<B;x+=24)b.fillRect(x,y,2,2);
+  b.fillStyle='#d9b48c';b.fillRect(0,floor,B,B-floor);b.fillStyle='#c9a27a';b.fillRect(0,floor,B,2);
+  for(let x=10;x<B;x+=30)b.fillRect(x,floor+5,22,1);
   // stand
-  b.fillStyle='#2a1f35';b.fillRect(cx-22,cy+R-6,6,18);b.fillRect(cx+16,cy+R-6,6,18);b.fillRect(cx-28,cy+R+10,56,4);
-  b.fillStyle='#5c4d91';b.fillRect(cx-21,cy+R-5,4,15);b.fillRect(cx+17,cy+R-5,4,15);
-  b.save();b.translate(cx,cy);b.rotate(rot);
-  WHEEL_TIERS.forEach(([,,col],i)=>{b.beginPath();b.moveTo(0,0);b.arc(0,0,R,i*WHEEL_SEG,(i+1)*WHEEL_SEG);b.closePath();b.fillStyle=col;b.fill();});
-  b.strokeStyle='#2a1f35';b.lineWidth=2;
-  WHEEL_TIERS.forEach((_,i)=>{const a=i*WHEEL_SEG;b.beginPath();b.moveTo(0,0);b.lineTo(Math.cos(a)*R,Math.sin(a)*R);b.stroke();});
-  b.lineWidth=4;b.beginPath();b.arc(0,0,R-1,0,Math.PI*2);b.stroke();
-  b.fillStyle='#d6c9ff';for(let i=0;i<14;i++){const a=i*Math.PI/7;b.fillRect(Math.round(Math.cos(a)*(R-1))-1,Math.round(Math.sin(a)*(R-1))-1,2,2);}
-  b.restore();
-  b.fillStyle='#2a1f35';b.fillRect(cx-4,cy-4,8,8);b.fillStyle='#d6c9ff';b.fillRect(cx-2,cy-2,4,4);
-  // cat running on the inside of the rim, and the pointer, go on a top layer above the labels
+  const top=cy+R-16,leg=floor+2-top;
+  b.fillStyle='#7c6a5c';b.fillRect(cx-34,top,6,leg);b.fillRect(cx+28,top,6,leg);b.fillRect(cx-42,floor+1,84,3);
+  b.fillStyle='#a58d78';b.fillRect(cx-33,top+1,2,leg-1);b.fillRect(cx+29,top+1,2,leg-1);b.fillRect(cx-41,floor+1,82,1);
+  // wheel face, painted per pixel so its edges are hard: segment colour, with a darker band at the rim
+  const img=b.getImageData(0,0,B,B),d=img.data,n=WHEEL_TIERS.length;
+  for(let y=0;y<B;y++)for(let x=0;x<B;x++){const dx=x+.5-cx,dy=y+.5-cy,r2=dx*dx+dy*dy;if(r2>(R+.5)**2)continue;
+    const i=(y*B+x)*4,seg=((Math.floor((Math.atan2(dy,dx)-rot)/WHEEL_SEG)%n)+n)%n;
+    const hex=WHEEL_TIERS[seg][r2>(R-5)**2?2:1];d[i]=parseInt(hex.slice(1,3),16);d[i+1]=parseInt(hex.slice(3,5),16);d[i+2]=parseInt(hex.slice(5,7),16);d[i+3]=255;}
+  b.putImageData(img,0,0);
+  // spokes, outer ring and rivets, drawn as hard 1px dots so they stay on the grid
+  const dot=(x,y,c)=>{b.fillStyle=c;b.fillRect(Math.round(cx+x-.5),Math.round(cy+y-.5),1,1);};
+  WHEEL_TIERS.forEach((_,i)=>{const a=rot+i*WHEEL_SEG;for(let r=6;r<R;r+=.5)dot(Math.cos(a)*r,Math.sin(a)*r,'#5c4f63');});
+  for(let i=0;i<900;i++){const a=i*Math.PI/450;dot(Math.cos(a)*(R+.5),Math.sin(a)*(R+.5),'#5c4f63');dot(Math.cos(a)*(R+1.5),Math.sin(a)*(R+1.5),'#5c4f63');}
+  for(let i=0;i<14;i++){const a=rot+i*Math.PI/7;dot(Math.cos(a)*(R-2.5),Math.sin(a)*(R-2.5),'#fbf6ee');}
+  // hub
+  b.fillStyle='#5c4f63';b.fillRect(cx-5,cy-5,10,10);b.fillStyle='#f6e7c8';b.fillRect(cx-3,cy-3,6,6);b.fillStyle='#c4b8a0';b.fillRect(cx-1,cy-1,2,2);
+  // cat running on the inside of the rim (at the sprite's own 1:1 size) and the pointer go on a layer above the labels
   if(roomImagesLoaded){const c=CAT_ATLAS.cats[coat]||CAT_ATLAS.cats[CAT_COATS[0]],a=c.animations[anim];
     let i=Math.floor(animT*a.fps);i=a.loop?i%a.frames:Math.min(i,a.frames-1);const [sx,sy,w,h]=a.rects[i];
-    t.drawImage(atlasImage,sx,sy,w,h,cx-16,cy+R-4-29,w,h);}
-  t.fillStyle='#2a1f35';t.fillRect(cx-6,0,12,3);t.fillRect(cx-5,3,10,2);t.fillRect(cx-4,5,8,2);t.fillRect(cx-3,7,6,2);t.fillRect(cx-2,9,4,2);
-  t.fillStyle='#ffe39a';t.fillRect(cx-4,1,8,2);t.fillRect(cx-3,3,6,2);t.fillRect(cx-2,5,4,2);t.fillRect(cx-1,7,2,2);
+    t.drawImage(atlasImage,sx,sy,w,h,cx-16,cy+R-5-29,w,h);}
+  t.fillStyle='#5c4f63';t.fillRect(cx-6,py,13,3);t.fillRect(cx-5,py+3,11,2);t.fillRect(cx-4,py+5,9,2);t.fillRect(cx-3,py+7,7,2);t.fillRect(cx-2,py+9,5,2);t.fillRect(cx-1,py+11,3,1);
+  t.fillStyle='#ffe39a';t.fillRect(cx-4,py+1,9,2);t.fillRect(cx-3,py+3,7,2);t.fillRect(cx-2,py+5,5,2);t.fillRect(cx-1,py+7,3,2);t.fillRect(cx,py+9,1,2);
 
   const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,canvas.width,canvas.height);
-  const k=Math.max(1,Math.floor(Math.min(canvas.width,canvas.height)/96)),ox=Math.round((canvas.width-96*k)/2),oy=Math.round((canvas.height-96*k)/2);
-  ctx.drawImage(wheelBuf,ox,oy,96*k,96*k);
-  // Category names along each segment, kept upright so none read upside down.
-  ctx.save();ctx.translate(ox+cx*k,oy+cy*k);ctx.font=`${Math.round(6.5*k)}px 'Jersey 10', monospace`;ctx.textBaseline='middle';ctx.fillStyle='rgba(29,24,48,.88)';
-  const r0=R*.34*k,r1=R*.9*k;
+  const k=Math.max(1,Math.floor(Math.min(canvas.width,canvas.height)/B)),ox=Math.round((canvas.width-B*k)/2),oy=Math.round((canvas.height-B*k)/2);
+  ctx.drawImage(wheelBuf,ox,oy,B*k,B*k);
+  // Labels: the pixel font at about the wheel's pixel size, centred along each segment
+  // and turned so none read upside down. Drawn at screen resolution so the letters stay clean when tilted.
+  const rc=(7+R-5)/2;
+  ctx.save();ctx.translate(ox+cx*k,oy+cy*k);ctx.font=`${12*k}px 'Jersey 10', monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#3d394e';
   WHEEL_TIERS.forEach(([name],i)=>{const mid=rot+(i+.5)*WHEEL_SEG,flip=Math.cos(mid)<0;
-    ctx.save();ctx.rotate(flip?mid+Math.PI:mid);ctx.textAlign=flip?'left':'right';ctx.fillText(name,flip?-r1:r1,0,r1-r0);ctx.restore();});
+    ctx.save();ctx.rotate(flip?mid+Math.PI:mid);ctx.fillText(name,(flip?-rc:rc)*k,k*.5);ctx.restore();});
   ctx.restore();
-  ctx.drawImage(wheelTop,ox,oy,96*k,96*k);
+  ctx.drawImage(wheelTop,ox,oy,B*k,B*k);
 }

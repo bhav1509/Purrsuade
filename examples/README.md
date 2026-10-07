@@ -1,10 +1,9 @@
 # Example data
 
-`sample-backup-2026-10-05.json` is a real backup from the first test run (exported via
-Settings → Export). It shows the shape of the saved state: XP, coins, streak, room style,
-the cat's needs, and one completed daily quest with its transcript, pasted AI feedback,
-scores and self-ratings.
+`sample-backup.json` is a made-up backup in the same format as Settings → Export. It shows the
+shape of the saved state: XP, coins, streak, room style, furniture layout, transcription setting,
+the cat's needs, one completed daily quest (transcript, pasted AI feedback, scores, self-ratings)
+and one quest left unfinished at midnight (`"incomplete": true`).
 
-Use it as a reference when changing the data format, or restore it with Settings → Import
-to try the app with realistic data. It contains a personal speaking transcript, so think
-twice before publishing this folder.
+Use it as a reference when changing the data format, or load it with Settings → Import to try
+the app with realistic data.
