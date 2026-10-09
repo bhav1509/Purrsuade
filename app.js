@@ -1,3 +1,5 @@
+const APP_VERSION='1.0';
+// Storage keys keep the original name so existing progress carries over after the rename.
 const STORE='communication-quest-week1-v1';
 const $=s=>document.querySelector(s);
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
@@ -23,10 +25,14 @@ outer: for(const [d,t] of BASE_TOPICS){for(const v of VARIATIONS){TOPICS.push({d
 const SKILLS=['clarity','structure','confidence','vocabulary','conciseness','grammar'];
 const LABEL={clarity:'Clarity',structure:'Structure',confidence:'Confidence',vocabulary:'Vocabulary',conciseness:'Conciseness',grammar:'Grammar',overall:'Overall'};
 
-function fresh(){return {xp:0,coins:80,streak:0,lastDaily:null,duration:2,room:'cream_checker',layout:{},history:[],cat:{name:'Miso',coat:'orange_tabby',hunger:82,thirst:82,cleanliness:82,happiness:82,lastUpdated:Date.now(),criticalSince:null,alive:true},version:1};}
+function fresh(){return {xp:0,coins:80,streak:0,lastDaily:null,duration:2,room:'cream_checker',layout:{},history:[],cat:{name:'Miso',coat:'orange_tabby',hunger:82,thirst:82,cleanliness:82,happiness:82,lastUpdated:Date.now(),zeroSince:null,alive:true,born:today()},graves:[],version:1};}
 function load(){try{return hydrate({...fresh(),...JSON.parse(localStorage.getItem(STORE)||'{}')});}catch{return fresh();}}
-function hydrate(d){d.cat={...fresh().cat,...(d.cat||{})};d.layout=d.layout&&typeof d.layout==='object'?d.layout:{}; d.coins=Number.isFinite(d.coins)?d.coins:80; return decayCat(d);}
-function save(){state.cat.lastUpdated=Date.now();localStorage.setItem(STORE,JSON.stringify(state));}
+function hydrate(d){const savedBorn=d.cat?.born;d.cat={...fresh().cat,...(d.cat||{})};d.graves=Array.isArray(d.graves)?d.graves:[];d.history=d.history||[];
+  // Cats from before birthdays were tracked: born on the day of the first session (or after the previous cat).
+  const firstDay=d.history.map(h=>h.date).sort()[0];
+  if(!savedBorn)d.cat.born=d.graves.length?d.graves[d.graves.length-1].died:(firstDay||today());
+  repairGraves(d);d.layout=d.layout&&typeof d.layout==='object'?d.layout:{}; d.coins=Number.isFinite(d.coins)?d.coins:80; return decayCat(d);}
+function save(){localStorage.setItem(STORE,JSON.stringify(state));}
 // The quest in progress is kept under its own key so typing can save it without touching the cat's decay clock.
 const QUEST_STORE=STORE+'-quest';
 function loadQuest(){try{const q=JSON.parse(localStorage.getItem(QUEST_STORE)||'null');return q&&q.topic?q:null;}catch{return null;}}
@@ -44,12 +50,44 @@ function rolloverQuest(){
   challenge=null;saveQuest();return kept?'saved':'dropped';
 }
 function saveQuest(){try{if(challenge)localStorage.setItem(QUEST_STORE,JSON.stringify(challenge));else localStorage.removeItem(QUEST_STORE);}catch{}}
+// Needs fall every hour, even while the app is closed (% per hour).
+const DECAY={hunger:.85,thirst:1,cleanliness:.55,happiness:.38};
+const NEED_KEYS=Object.keys(DECAY),DAY=86400000,GRACE_DAYS=3;
+const healthOf=c=>(c.hunger+c.thirst+c.cleanliness+c.happiness)/4;
+// Health after `h` hours of no care, from needs `c`.
+const healthAfter=(c,h)=>NEED_KEYS.reduce((s,k)=>s+clamp(c[k]-h*DECAY[k],0,100),0)/4;
+// 0 hearts = health below 5%. After GRACE_DAYS at 0 hearts the cat dies and gets a headstone.
 function decayCat(d){
-  const cat=d.cat; const hours=Math.max(0,(Date.now()-(cat.lastUpdated||Date.now()))/3600000);
-  if(hours>0.2 && cat.alive){cat.hunger=clamp(cat.hunger-hours*0.85,0,100);cat.thirst=clamp(cat.thirst-hours*1.0,0,100);cat.cleanliness=clamp(cat.cleanliness-hours*0.55,0,100);cat.happiness=clamp(cat.happiness-hours*0.38,0,100);}
-  const danger=Math.min(cat.hunger,cat.thirst,cat.cleanliness);
-  if(danger<=0){if(!cat.criticalSince)cat.criticalSince=Date.now(); if((Date.now()-cat.criticalSince)/86400000>=10)cat.alive=false;} else if(danger>15)cat.criticalSince=null;
-  cat.lastUpdated=Date.now(); return d;
+  const cat=d.cat,now=Date.now(),hours=Math.max(0,(now-(cat.lastUpdated||now))/3600000);
+  if(!cat.alive){cat.lastUpdated=now;return d;}
+  if(hours<0.02)return d; // keep the clock running between quick re-renders
+  const before={...cat},startHealth=healthOf(cat);
+  for(const k of NEED_KEYS)cat[k]=clamp(cat[k]-hours*DECAY[k],0,100);
+  if(healthOf(cat)<5){
+    if(!cat.zeroSince){
+      // When did the hearts run out? Binary-search the decay curve so time away is counted fairly.
+      let lo=0,hi=hours;if(startHealth>=5){for(let i=0;i<30;i++){const m=(lo+hi)/2;healthAfter(before,m)<5?hi=m:lo=m;}}else hi=0;
+      cat.zeroSince=(cat.lastUpdated||now)+hi*3600000;
+    }
+    if(now-cat.zeroSince>=GRACE_DAYS*DAY)catDies(d,cat.zeroSince+GRACE_DAYS*DAY);
+  }else cat.zeroSince=null;
+  cat.lastUpdated=now;return d;
+}
+function catDies(d,when){
+  const cat=d.cat,born=cat.born||d.history.map(h=>h.date).sort()[0]||today(),diedOn=ymd(new Date(Math.min(when,Date.now())));
+  d.graves=d.graves||[];
+  // Sessions count until the death is noticed (you may have practised before opening the app).
+  d.graves.push({id:Date.now(),name:cat.name,coat:cat.coat,born,died:diedOn<born?born:diedOn,sessions:sessionsBetween(d,born,today())});
+  cat.alive=false;cat.diedOn=diedOn;
+}
+const sessionsBetween=(d,from,to)=>d.history.filter(h=>!h.incomplete&&h.date>=from&&h.date<=to).length;
+// Fix headstones saved by an earlier version (born after died, sessions miscounted).
+function repairGraves(d){
+  const firstDay=d.history.map(h=>h.date).sort()[0];
+  d.graves.forEach((g,i)=>{if(g.repaired)return;const prev=d.graves[i-1],next=d.graves[i+1];
+    if(g.born>g.died)g.born=prev?prev.died:(firstDay&&firstDay<g.died?firstDay:g.died);
+    if(!prev&&firstDay&&firstDay<g.born)g.born=firstDay; // the first cat was there from the first session
+    const until=next?next.born:(d.cat.alive?d.cat.born:today());g.sessions=sessionsBetween(d,g.born,until>g.born?until:g.died);g.repaired=true;});
 }
 function level(){return Math.floor(state.xp/500)+1;}
 function title(){const l=level();return l<=2?'Curious Speaker':l<=4?'Clear Speaker':l<=6?'Confident Communicator':l<=8?'Persuasive Speaker':'Communication Champion';}
@@ -61,11 +99,11 @@ function recentAvg(){const a=sessions().slice(0,5).map(h=>+h.scores.overall).fil
 function difficulty(){let d=1+Math.floor(sessions().length/5); const a=recentAvg(); if(a>=8)d++; if(a && a<6)d--; return clamp(d,1,7);}
 function nextDuration(){const a=sessions().slice(0,3).map(h=>+h.scores.overall).filter(Boolean);if(a.length<3)return state.duration;const avg=a.reduce((x,y)=>x+y,0)/a.length;if(avg>=7.5)return clamp(state.duration+.5,2,5);if(avg<5.5)return clamp(state.duration-.5,2,5);return state.duration;}
 function yesterday(){const d=new Date();d.setDate(d.getDate()-1);return ymd(d);}
-function catMood(){const c=state.cat;if(!c.alive)return ['Gone','Miso is no longer here. Restore a backup or reset the app to begin again.'];const m=Math.min(c.hunger,c.thirst,c.cleanliness,c.happiness);if(m<15)return ['Critical','Miso urgently needs care.'];if(m<35)return ['Unhappy','Miso needs some attention.'];if(m<60)return ['Okay','Miso is doing okay, but could use some care.'];if(m<85)return ['Happy','Miso is feeling content.'];return ['Thriving','Miso is thriving!'];}
+function catMood(){const c=state.cat,n=c.name;if(!c.alive)return ['Gone',`${n} is resting in the garden.`];const m=Math.min(c.hunger,c.thirst,c.cleanliness,c.happiness);if(healthOf(c)<15)return ['Sick',`${n} is very weak and needs care now.`];if(m<15)return ['Critical',`${n} urgently needs care.`];if(m<35)return ['Unhappy',`${n} needs some attention.`];if(m<60)return ['Okay',`${n} is doing okay, but could use some care.`];if(m<85)return ['Happy',`${n} is feeling content.`];return ['Thriving',`${n} is thriving!`];}
 function skillAvg(s){const a=sessions().map(h=>+h.scores[s]).filter(Boolean);return a.length?round1(a.reduce((x,y)=>x+y,0)/a.length):0;}
 
 let state=load(), challenge=loadQuest(), toastTimer=null;
-setRoomLayout(state.layout);
+setRoomLayout(state.layout);setRoomGraves(state.graves);
 rolloverQuest();
 // Check again at each local midnight, and whenever the app comes back (timers sleep on phones).
 function newDayCheck(){const r=rolloverQuest();if(r){wheel={rot:wheel.rot,spinning:false};render();toast(r==='saved'?'New day · your unfinished quest was saved to the journal.':'New day · time for a fresh quest.');}}
@@ -125,13 +163,14 @@ function paintPixels(){
 }
 // Dropdowns open and close only from their own buttons.
 // Phone only: the Needs button opens the Food / Water / Clean / Happy dropdown (meters are always shown on laptop).
-function setStatsOpen(open){statsOpen=open;$('.room-top')?.classList.toggle('stats-open',open);$('[data-stats-toggle]')?.setAttribute('aria-expanded',open);}
+function setStatsOpen(open){statsOpen=open;if(open)tourEvent('needs');$('.room-top')?.classList.toggle('stats-open',open);$('[data-stats-toggle]')?.setAttribute('aria-expanded',open);}
 let resizeTimer=null;
 window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(panel==='journal')render();else paintPixels();},150);});
 
 // ---- The whole app is the cat room; everything else opens in a panel over it ----
 function render(){
-  state=decayCat(state);save();saveQuest();
+  const wasAlive=state.cat.alive;state=decayCat(state);save();saveQuest();
+  if(wasAlive&&!state.cat.alive){setRoomGraves(state.graves);setTimeout(showFarewell,0);}
   $('#app').innerHTML=gameView();
   paintPixels(); bind(); paintWheel(); fitHistory();
 }
@@ -139,6 +178,7 @@ function render(){
 function setPanel(name){
   if(panel===name)name=null;
   if(name!=='quest'&&recActive())stopRecording();
+  if(name==='quest')tourEvent('quest');
   if(name&&arrange.on){arrange.on=false;panel=name;render();return;}
   const el=$('.panel'),wasOpen=!!panel;panel=name;
   if(!el){render();return;}
@@ -170,7 +210,8 @@ function gameView(){const c=state.cat,[,msg]=catMood(),health=catHealth(),daily=
     <div class="room-top${statsOpen?' stats-open':''}">
       <div class="room-hud">${HUD.map(([l,key,kind,icon])=>{const v=Math.round(c[key]);return `<div class="hud-meter ${kind}${v<35?' low':''}" title="${l} ${v}%"><canvas class="hud-icon" data-pixel-icon="${icon}" width="32" height="32"></canvas><div><span><em>${l}</em><b>${v}%</b></span><div class="bar"><i style="width:${v}%"></i></div></div></div>`;}).join('')}</div>
       <div class="room-status">
-        <div class="status-left"><span class="chip hearts" role="img" aria-label="Health ${health}%" title="${esc(msg)}">${hearts(health)}</span><button class="chip needs-toggle" data-stats-toggle aria-expanded="${statsOpen}">Needs${HUD.some(h=>c[h[1]]<35)?'<i class="alert-dot" title="A need is low"></i>':''}<i class="caret" aria-hidden="true"></i></button></div>
+        <div class="status-left"><span class="chip hearts${c.alive&&health<25?' danger':''}" role="img" aria-label="Health ${health}%" title="${esc(msg)}">${hearts(health)}</span><button class="chip needs-toggle" data-stats-toggle aria-expanded="${statsOpen}">Needs${HUD.some(h=>c[h[1]]<35)?'<i class="alert-dot" title="A need is low"></i>':''}<i class="caret" aria-hidden="true"></i></button></div>
+        <span class="chip level" title="Level ${level()} · ${title()} · ${state.xp%500}/500 XP to the next level">Lv ${level()}<i class="lv-bar"><b style="width:${(state.xp%500)/5}%"></b></i></span>
         <span class="chip coins" title="Coins">${COIN}${state.coins}</span>
       </div>
       <nav class="hud-menu" aria-label="Menu">${PANELS.map(([k,icon,l])=>`<button class="hud-btn${panel===k?' active':''}" data-panel="${k}" title="${l}" aria-label="${l}"><i class="px-icon ${icon}" aria-hidden="true"></i><span>${l}</span></button>`).join('')}</nav>
@@ -196,7 +237,7 @@ function panelView(){
 }
 
 // ---- Quest ----
-const QUEST_STEPS=['Topic','Speak','Coach','Reflect'];
+const QUEST_STEPS=['Topic','Speak','Coach'];
 // Wheel state while choosing a topic: {rot, spinning, from, to, start, pick, rerolled, landed}
 let wheel={rot:wheelRotFor(0,.1),spinning:false};let wheelFrame=null;
 function questPanel(){
@@ -207,12 +248,18 @@ function questPanel(){
     <p class="wheel-label" id="wheel-label" style="--tier:${tier[1]}">${wheel.spinning||wheel.landed?tier[0]:'Spin for a topic'}</p>
     <button class="primary" id="spin" ${wheel.spinning?'disabled':''}>${wheel.spinning?'Spinning…':daily?'Spin a practice topic':'Spin for today’s topic'}</button>
     <p class="muted">Difficulty ${difficulty()}/7 · ${prep()} sec prep · ${state.duration} min target</p></div>`;}
-  const st=challenge.step||0;
+  const st=Math.min(challenge.step||0,QUEST_STEPS.length-1);
   return `<div class="challenge"><div class="steps">${QUEST_STEPS.map((l,i)=>`<button data-step="${i}" class="${i===st?'active':''}${i<st?' done':''}"><b>${i+1}</b>${l}</button>`).join('')}</div>
-  <div class="step-body">${[stepTopic,stepSpeak,stepCoach,stepReflect][st]()}</div>
-  <div class="step-foot">${st?`<button class="secondary" data-step="${st-1}">← Back</button>`:''}${st<3?`<button class="primary" data-step="${st+1}">Next →</button>`:'<button class="primary" id="complete">Complete quest ✨</button>'}</div></div>`;
+  <div class="step-body">${[stepTopic,stepSpeak,stepCoach][Math.min(st,2)]()}</div>
+  <div class="step-foot">${st?`<button class="secondary" data-step="${st-1}">← Back</button>`:''}${st<2?`<button class="primary" data-step="${st+1}">Next →</button>`:'<button class="primary" id="complete">Complete quest ✨</button>'}</div></div>`;
 }
 function stepTopic(){const tier=WHEEL_TIERS[challenge.difficulty-1];return `<div class="topic-box" style="--tier:${tier[1]}"><span>${tier[0].toUpperCase()} · LEVEL ${challenge.difficulty}/7</span><h3>${challenge.topic}</h3><div class="chips"><b><i class="px-icon brain" aria-hidden="true"></i>${prep()}s prep</b><b><i class="px-icon mic light" aria-hidden="true"></i>${state.duration} min target</b></div></div>${!challenge.rerolled?'<button class="secondary" id="reroll">↻ Use free reroll</button>':''}<p class="muted">Take ${prep()} seconds to prepare, then speak for about ${state.duration} minutes. Transcribe it for the next step.</p>`;}
+// Big countdown digits drawn as pixels (the font's "1" has a flag that reads like a stray line).
+const DIGITS=['.###.|#...#|#..##|#.#.#|##..#|#...#|.###.','..#..|.##..|..#..|..#..|..#..|..#..|.###.','.###.|#...#|....#|...#.|..#..|.#...|#####','####.|....#|....#|.###.|....#|....#|####.','...#.|..##.|.#.#.|#..#.|#####|...#.|...#.','#####|#....|####.|....#|....#|#...#|.###.','.###.|#....|#....|####.|#...#|#...#|.###.','#####|....#|...#.|..#..|.#...|.#...|.#...','.###.|#...#|#...#|.###.|#...#|#...#|.###.','.###.|#...#|#...#|.####|....#|....#|.###.'].map(d=>d.split('|'));
+DIGITS[1]=['..#..','..#..','..#..','..#..','..#..','..#..','..#..'];DIGITS[0]=['.###.','#...#','#...#','#...#','#...#','#...#','.###.'];
+function pixelNumber(n){const ds=String(n).split('').map(Number),W=ds.length*6-1;
+  return `<svg viewBox="0 0 ${W} 7" width="${W*11}" height="77" shape-rendering="crispEdges" aria-hidden="true">${ds.map((d,k)=>DIGITS[d].map((row,y)=>[...row].map((c,x)=>c==='#'?`<rect x="${k*6+x}" y="${y}" width="1" height="1"/>`:'').join('')).join('')).join('')}</svg>`;}
+
 // ---- Speak: plan countdown, then record with a timer and a live transcript ----
 const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
 // Phones generally can't share the mic between speech recognition and a recorder, so there we only transcribe.
@@ -262,7 +309,7 @@ function startRecognition(r){
 }
 function showLive(){const el=$('#live-text');if(!el)return;el.innerHTML=`${esc(rec.final)} <i>${esc(rec.interim)}</i>`;el.scrollTop=el.scrollHeight;}
 function tickRecorder(){
-  if(rec.phase==='prep'){const left=Math.ceil((rec.prepEnd-Date.now())/1000);if(left<=0){beginRecording();return;}const el=$('#prep-count');if(el)el.textContent=left;}
+  if(rec.phase==='prep'){const left=Math.ceil((rec.prepEnd-Date.now())/1000);if(left<=0){beginRecording();return;}const el=$('#prep-count');if(el&&el.dataset.n!=String(left)){el.dataset.n=left;el.innerHTML=pixelNumber(left);}}
   else if(rec.phase==='rec'){const s=recSeconds(),target=state.duration*60;
     const lv=$('#mic-level');if(lv){let v=0;if(rec.an){rec.an.getFloatTimeDomainData(rec.lvl);let sum=0;for(const x of rec.lvl)sum+=x*x;v=Math.min(1,Math.sqrt(sum/rec.lvl.length)*6);}else v=rec.hearing?.6+Math.random()*.3:0;
       rec.level=Math.max(v,(rec.level||0)*.8);lv.style.width=`${Math.round(rec.level*100)}%`;}
@@ -292,7 +339,7 @@ function cancelSpeaking(){try{rec.ac?.close();}catch{}try{rec.sr&&(rec.sr.onend=
 function stepSpeak(){
   const target=state.duration*60;
   if(rec.phase==='prep'){const left=Math.max(1,Math.ceil((rec.prepEnd-Date.now())/1000));return `<div class="speak-stage">
-    <span class="eyebrow">PLAN YOUR ANSWER</span><b class="big-count" id="prep-count">${left}</b><p class="speak-topic">${esc(challenge.topic)}</p>
+    <span class="eyebrow">PLAN YOUR ANSWER</span><b class="big-count" id="prep-count" data-n="${left}" aria-label="${left} seconds">${pixelNumber(left)}</b><p class="speak-topic">${esc(challenge.topic)}</p>
     <p class="muted">Pick an opening, two or three points and a closing line.</p>
     <div class="speak-actions"><button class="secondary" id="rec-cancel">Cancel</button><button class="primary" id="rec-now">Start speaking now</button></div></div>`;}
   if(rec.phase==='rec'||rec.phase==='stopping'){const s=recSeconds();return `<div class="speak-stage live">
@@ -356,7 +403,10 @@ async function prepareWhisper(btn){
 
 // ---- Coach: send the transcript to any chat AI, paste the reply back, scores fill themselves in ----
 const SCORE_KEYS=[...SKILLS,'overall'];
-function coachPrompt(){return `You are my friendly but honest communication mentor. I am practicing speaking, not writing. The transcript below was captured by speech recognition, so ignore small transcription errors.\n\nScore each from 1–10: Clarity, Structure, Confidence, Vocabulary, Conciseness, Grammar, Overall.\n\nThen give:\n1. Three specific strengths\n2. Three specific improvements\n3. A stronger structure I could have used\n4. A short improved example answer\n5. One focus for my next speaking session\n\nDo not overpraise me. Be encouraging, concrete and concise.\n\nEnd your reply with this exact line, filled in:\nSCORES: clarity=X; structure=X; confidence=X; vocabulary=X; conciseness=X; grammar=X; overall=X\n\nTOPIC:\n${challenge.topic}\n\nTRANSCRIPT:\n${challenge.transcript}`;}
+function coachPrompt(){
+  const words=challenge.transcript.trim().split(/\s+/).filter(Boolean).length,sec=challenge.spokeSec||0;
+  const timing=sec?`SPEAKING TIME: ${mmss(sec)} (target: about ${state.duration} min) · roughly ${Math.round(words/(sec/60))} words per minute`:`TARGET LENGTH: about ${state.duration} min (actual time not recorded)`;
+  return `You are my friendly but honest communication mentor. I am practicing speaking, not writing. The transcript below was captured by speech recognition, so ignore small transcription errors.\n\nScore each from 1–10: Clarity, Structure, Confidence, Vocabulary, Conciseness, Grammar, Overall.\n\nThen give:\n1. Three specific strengths\n2. Three specific improvements\n3. Timing and pace: did my length suit the target, and was my pace comfortable to listen to (around 130–160 words per minute is typical)?\n4. A stronger structure I could have used\n5. A short improved example answer\n6. One focus for my next speaking session\n\nDo not overpraise me. Be encouraging, concrete and concise.\n\nFinish your reply with these two sections, exactly in this format:\nKEY POINTS:\n- 3 to 5 bullet points, each under 15 words: the most important takeaways\nSCORES: clarity=X; structure=X; confidence=X; vocabulary=X; conciseness=X; grammar=X; overall=X\n\nTOPIC:\n${challenge.topic}\n\n${timing}\n\nTRANSCRIPT:\n${challenge.transcript}`;}
 // Reads scores from the reply: the SCORES line if present, otherwise lines like "Clarity: 7", "Clarity 7/10" or "| Clarity | 7/10 |".
 function parseScores(text){
   const out={},line=(text.match(/SCORES:([^\n]*)/i)||[])[1];
@@ -373,12 +423,16 @@ function stepCoach(){return `<div class="coach-send"><span class="eyebrow">1 · 
   <label class="grow"><textarea id="feedback" aria-label="AI reply" placeholder="Paste the AI’s reply here...">${esc(challenge.feedback)}</textarea></label>
   <div class="paste-head"><span class="eyebrow">SCORES</span><em id="score-status">${scoreStatus()}</em></div>
   <div class="score-grid compact">${SCORE_KEYS.map(s=>`<label class="score-input${s==='overall'?' overall':''}"><span>${LABEL[s]}</span><input data-score="${s}" type="number" inputmode="decimal" min="1" max="10" step="0.5" value="${challenge.scores[s]||''}"></label>`).join('')}</div>`;}
+// The short takeaways from the "KEY POINTS:" section of the reply (shown in the journal).
+function parseKeyPoints(text=''){
+  const m=text.match(/KEY POINTS:?(?:\*\*)?[^\S\n]*\n?([\s\S]*?)(?:\n\s*(?:\*\*)?SCORES:|$)/i);if(!m)return [];
+  return m[1].split('\n').map(l=>l.replace(/^\s*(?:[-•*·]|\d+[.)])\s*/,'').replace(/\*\*/g,'').trim()).filter(l=>/[a-z0-9]/i.test(l)&&!/^SCORES/i.test(l)).slice(0,6);
+}
 function setFeedback(text){
-  challenge.feedback=text;const found=parseScores(text);Object.assign(challenge.scores,found);saveQuest();
+  challenge.feedback=text;challenge.keyPoints=parseKeyPoints(text);const found=parseScores(text);Object.assign(challenge.scores,found);saveQuest();
   for(const [k,v] of Object.entries(found)){const i=$(`[data-score="${k}"]`);if(i)i.value=v;}
   const st=$('#score-status');if(st)st.textContent=scoreStatus();
 }
-function stepReflect(){return `<h3 class="form-title">How did it feel?</h3>${['confidence','fluency','satisfaction'].map(s=>`<label class="range"><span>${cap(s)} <b>${challenge.self[s]}/10</b></span><input data-self="${s}" type="range" min="1" max="10" value="${challenge.self[s]}"></label>`).join('')}`;}
 
 // Draw the wheel; while spinning, ease towards the target and let the cat run, then reveal the topic.
 function paintWheel(){
@@ -446,7 +500,9 @@ function journalPanel(){
   return `${cal}<div class="hist-list"><div class="hist-rows">${rows.map(h=>`<button class="hist-row" data-hist="${h.id}"><span><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><b>${esc(h.topic)}</b></span><span class="score${h.incomplete?' inc':''}">${h.incomplete?'—':h.scores.overall}</span></button>`).join('')}</div>
   <div class="pager"><button class="secondary" data-hist-page="-1" ${histPage?'':'disabled'}>←</button><span>${histPage+1} / ${pages}</span><button class="secondary" data-hist-page="1" ${histPage<pages-1?'':'disabled'}>→</button></div></div>`;
 }
-function histDetail(h){return `<div class="hist-detail"><div class="detail-head"><button class="mini back" data-hist-back>← All sessions</button><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><h3>${esc(h.topic)}</h3><div class="chips"><b>🎯 ${h.scores.overall||'—'}/10</b><b>⭐ +${h.earnedXP} XP</b><b>${COIN}+${h.earnedCoins}</b><b><i class="px-icon mic light" aria-hidden="true"></i>${h.spokeSec?mmss(h.spokeSec):h.duration+' min'}</b></div><div class="score-chips">${SKILLS.map(s=>`<span>${LABEL[s]} <b>${h.scores[s]||'—'}</b></span>`).join('')}</div></div><div class="detail-text"><h4>Transcript</h4><p class="pre">${esc(h.transcript||'No transcript saved.')}</p></div><div class="detail-text"><h4>AI feedback</h4><p class="pre">${esc(h.feedback||'No feedback saved.')}</p></div></div>`;}
+function histDetail(h){return `<div class="hist-detail"><div class="detail-head"><button class="mini back" data-hist-back>← All sessions</button><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><h3>${esc(h.topic)}</h3><div class="chips"><b>🎯 ${h.scores.overall||'—'}/10</b><b>⭐ +${h.earnedXP} XP</b><b>${COIN}+${h.earnedCoins}</b><b><i class="px-icon mic light" aria-hidden="true"></i>${h.spokeSec?mmss(h.spokeSec):h.duration+' min'}</b></div><div class="score-chips">${SKILLS.map(s=>`<span>${LABEL[s]} <b>${h.scores[s]||'—'}</b></span>`).join('')}</div></div>${(()=>{const kp=h.keyPoints?.length?h.keyPoints:parseKeyPoints(h.feedback);
+    return kp.length?`<div class="detail-text key-points"><h4>Key points</h4><ul>${kp.map(p=>`<li>${esc(p)}</li>`).join('')}</ul><details><summary>Full AI feedback</summary><p class="pre">${esc(h.feedback)}</p></details></div>`
+      :`<div class="detail-text"><h4>AI feedback</h4><p class="pre">${esc(h.feedback||'No feedback saved.')}</p></div>`;})()}<div class="detail-text"><h4>Transcript</h4><p class="pre">${esc(h.transcript||'No transcript saved.')}</p></div></div>`;}
 // This month at a glance: days with a completed daily quest are filled in.
 function monthCalendar(){
   const now=new Date(),y=now.getFullYear(),m=now.getMonth(),days=new Date(y,m+1,0).getDate(),lead=(new Date(y,m,1).getDay()+6)%7;
@@ -469,15 +525,18 @@ function settingsPanel(){const c=state.cat;return `
     <div class="choice">${[['browser','Quick','Live text from your browser while you talk. Can miss words, especially around pauses.'],['whisper','High accuracy','Whisper writes it out on this device after you stop. Catches more words. One-time ~77 MB download.']].map(([k,t,d])=>`<button data-transcriber="${k}" class="${transcriber()===k?'active':''}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>
     ${transcriber()==='whisper'?(state.whisperReady?'<p class="muted small">Speech model downloaded ✓ Works offline.</p>':'<button class="secondary" id="whisper-prep">Download the speech model now</button>'):''}</section>
   ${installCard()}
+  ${location.hash==='#debug'?`<section class="p-card"><h3>Test: skip time</h3><div class="settings">${[6,24,72].map(h=>`<button class="secondary" data-skip="${h}">+${h<24?h+' h':h/24+' d'}</button>`).join('')}</div></section>`:''}
+  <section class="p-card"><h3>Help</h3><button class="secondary" id="replay-tour">Show the tour again</button></section>
   <section class="p-card"><h3>Privacy</h3><p class="muted small">Everything (your cat, sessions and recordings) stays on this device; there are no accounts. High-accuracy transcription runs on this device too. Quick transcription uses your browser’s speech service (Chrome sends audio to Google). Feedback only goes to an AI when you copy or share it yourself.</p></section>
-  <section class="p-card"><h3>Backup</h3><p class="muted small">Progress lives on this device. Export a backup regularly.</p><div class="settings"><button class="secondary" id="export">↓ Export</button><button class="secondary" id="import">↑ Import</button><button class="danger" id="reset">Reset</button></div></section>
+  <section class="p-card"><h3>Backup</h3><p class="muted small">Progress lives on this device. Export a backup regularly.${state.lastBackup?` Last backup: ${longDate(ymd(new Date(state.lastBackup)))}.`:' No backup yet.'}</p><div class="settings"><button class="secondary" id="export">↓ Export</button><button class="secondary" id="import">↑ Import</button><button class="danger" id="reset">Reset</button></div></section>
+  <p class="app-version">Purrsuade v${APP_VERSION}</p>
 `;}
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}function cap(s){return s[0].toUpperCase()+s.slice(1);}
 
 // ---- Install as an app ----
 let installPrompt=null;
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;if(panel==='settings')render();});
-addEventListener('appinstalled',()=>{installPrompt=null;toast('Installed · find Communication Quest with your apps');});
+addEventListener('appinstalled',()=>{installPrompt=null;toast('Installed · find Purrsuade with your apps');});
 const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 function installCard(){
   if(standalone())return '';
@@ -504,10 +563,10 @@ function bind(){
       const now=performance.now();
       // A second tap on the cat soon after the first zooms in on it.
       if(now-lastPet<400){focusCat(room,{instant:reducedMotion(),onChange:redrawStill});lastPet=0;return;}
-      lastPet=now;catReaction={type:'pet',started:now};floatGain('♥','pet');};
+      lastPet=now;catReaction={type:'pet',started:now};floatGain('♥','pet');tourEvent('pet');};
     // Arrange mode: presses on furniture drag it instead of panning; the layout is saved on drop.
     const grab=e=>arrange.on?grabItem(room,e,{onMove:redrawStill,onDrop:layout=>{state.layout=layout;setRoomLayout(layout,performance.now());save();}}):null;
-    enableRoomCamera(room,{grab,pinch:matchMedia('(pointer: coarse)').matches,onTap:e=>{if(!arrange.on)pet(e);},resetButton:$('.cam-reset'),zoomIn:$('[data-zoom="in"]'),zoomOut:$('[data-zoom="out"]'),onChange:redrawStill});
+    enableRoomCamera(room,{grab,pinch:matchMedia('(pointer: coarse)').matches,onTap:e=>{if(arrange.on)return;const g=graveAt(room,e.clientX,e.clientY);if(g){showGrave(g);return;}pet(e);},resetButton:$('.cam-reset'),zoomIn:$('[data-zoom="in"]'),zoomOut:$('[data-zoom="out"]'),onChange:redrawStill});
   }
   bindPanel();
 }
@@ -532,11 +591,13 @@ function bindPanel(){
   qa('[data-coat]').forEach(b=>b.onclick=()=>{state.cat.coat=b.dataset.coat;persist();});
   qa('[data-room]').forEach(b=>b.onclick=()=>{state.room=b.dataset.room;persist();});
   q('#install-app')?.addEventListener('click',async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice.catch(()=>{});installPrompt=null;render();});
+  q('#replay-tour')?.addEventListener('click',()=>startTour());
+  qa('[data-skip]').forEach(b=>b.onclick=()=>cqSkip(+b.dataset.skip));
   qa('[data-transcriber]').forEach(b=>b.onclick=()=>{state.transcriber=b.dataset.transcriber;persist();});
   q('#whisper-prep')?.addEventListener('click',e=>prepareWhisper(e.currentTarget));
   q('#save-cat-name')?.addEventListener('click',()=>{const n=$('#cat-name').value.trim().slice(0,18);if(!n){toast('Give your cat a name first.');return;}state.cat.name=n;persist();toast(`${n} has a new name!`);});
   q('#export')?.addEventListener('click',exportData);q('#import')?.addEventListener('click',()=>$('#import-file').click());
-  q('#reset')?.addEventListener('click',()=>{if(confirm('Reset Communication Quest and your cat? This cannot be undone unless you exported a backup.')){localStorage.removeItem(STORE);localStorage.removeItem(QUEST_STORE);state=fresh();setRoomLayout(state.layout,performance.now());panel=null;challenge=null;render();}});
+  q('#reset')?.addEventListener('click',()=>{if(confirm('Reset Purrsuade and your cat? This cannot be undone unless you exported a backup.')){localStorage.removeItem(STORE);localStorage.removeItem(QUEST_STORE);state=fresh();setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);panel=null;challenge=null;render();}});
 }
 async function copyPrompt(){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}const prompt=coachPrompt();try{await navigator.clipboard.writeText(prompt);toast('Copied · paste it into your AI');}catch{promptFallback(prompt);}}
 // On phones this opens the share sheet, so the prompt can go straight into the ChatGPT / Claude / Gemini app.
@@ -554,9 +615,113 @@ function flagField(step,selector,msg){
   el.addEventListener('pointerdown',clear);el.addEventListener('input',clear);setTimeout(clear,3500);
 }
 function completeQuest(){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const daily=state.lastDaily!==today();let xp=daily?100:35;xp+=25+10+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();toast(`Quest complete · +${xp} XP · +${coins} coins`);}
-function care(a){const c=state.cat;if(!c.alive){toast(`${c.name} cannot be cared for in this state.`);return;}const x=CARE_ACTIONS[a];if(!careGain(a)){toast(`${HUD.find(h=>h[1]===x.key)[0]} is already full.`);return;}if(state.coins<x.cost){toast('Not enough coins. Complete a speaking quest.');return;}state.coins-=x.cost;const before=c[x.key];c[x.key]=clamp(c[x.key]+x.gain,0,100);if(a==='food')c.happiness=clamp(c.happiness+5,0,100);if(a==='litter')c.happiness=clamp(c.happiness+4,0,100);catReaction={type:a,started:performance.now()};persist();toast(x.msg(c.name));floatGain(`+${Math.round(c[x.key]-before)} ${HUD.find(h=>h[1]===x.key)[0]}`,a);}
-function exportData(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`communication-quest-backup-${today()}.json`;a.click();URL.revokeObjectURL(url);toast('Backup exported.');}
-$('#import-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.history||!d.cat)throw new Error();state=hydrate({...fresh(),...d});setRoomLayout(state.layout,performance.now());save();panel=null;challenge=null;render();toast('Backup restored.');}catch{toast('That backup file is not valid.');}};r.readAsText(f);e.target.value='';});
+function care(a){const c=state.cat;if(!c.alive){toast(`${c.name} cannot be cared for in this state.`);return;}const x=CARE_ACTIONS[a];if(!careGain(a)){toast(`${HUD.find(h=>h[1]===x.key)[0]} is already full.`);return;}if(state.coins<x.cost){toast('Not enough coins. Complete a speaking quest.');return;}state.coins-=x.cost;const before=c[x.key];c[x.key]=clamp(c[x.key]+x.gain,0,100);if(a==='food')c.happiness=clamp(c.happiness+5,0,100);if(a==='litter')c.happiness=clamp(c.happiness+4,0,100);if(healthOf(c)>=5)c.zeroSince=null;catReaction={type:a,started:performance.now()};persist();tourEvent('care');toast(x.msg(c.name));floatGain(`+${Math.round(c[x.key]-before)} ${HUD.find(h=>h[1]===x.key)[0]}`,a);}
+function exportData(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`purrsuade-backup-${today()}.json`;a.click();URL.revokeObjectURL(url);state.lastBackup=Date.now();save();toast('Backup exported.');}
+$('#import-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.history||!d.cat)throw new Error();state=hydrate({...fresh(),...d});setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);save();panel=null;challenge=null;render();toast('Backup restored.');}catch{toast('That backup file is not valid.');}};r.readAsText(f);e.target.value='';});
 
 if('serviceWorker' in navigator && location.protocol!=='file:')window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+// ---- First-run tour: spotlight each control; some steps wait for the user to try it ----
+const visible=el=>el&&el.offsetParent!==null&&getComputedStyle(el).visibility!=='hidden';
+const TOUR=[
+  {title:'Meet your cat!',body:()=>`This little one lives in your room. Speak every day to earn coins and keep them happy.<label class="tour-name">Name your cat<input id="tour-cat-name" maxlength="18" value="${esc(state.cat.name)}"></label>`,next:'Let’s go'},
+  {target:()=>{const cv=$('#room-canvas'),c=cv?._cat;if(!c)return null;const rc=cv.getBoundingClientRect(),k=rc.width/cv.width;return {left:rc.left+c.x*k,top:rc.top+c.y*k,width:c.w*k,height:c.h*k};},
+    title:'Say hi',body:()=>`Tap ${esc(state.cat.name)} to pet them.`,wait:'pet'},
+  {target:()=>$('.room-hud'),when:()=>!visible($('.needs-toggle')),title:'Needs',body:()=>`Food, water, litter and fun. They drop slowly over time, so check in each day.`},
+  {target:()=>$('.needs-toggle'),when:()=>visible($('.needs-toggle')),title:'Needs',body:()=>`Tap <b>Needs</b> to see ${esc(state.cat.name)}’s food, water, litter and fun.`,wait:'needs'},
+  {target:()=>$('.hearts'),title:'Health',body:()=>`Hearts show overall health. Keep the needs up and the hearts stay full.`},
+  {target:()=>$('.coins'),title:'Coins',body:()=>`You earn coins by speaking, and spend them on food, toys and treats.`},
+  {target:()=>$('.care-menu'),title:'Look after them',body:()=>`Open <b>Care</b> and give ${esc(state.cat.name)} some water. It’s free!`,wait:'care'},
+  {target:()=>$('.cam-arrange'),title:'Make it yours',body:()=>`Tap here any time to move the furniture around the room.`},
+  {target:()=>$('.hud-menu'),title:'Menu',body:()=>`Your quests, progress, journal and settings live here.`},
+  {target:()=>$('.speak-btn'),title:'Your first quest',body:()=>`Ready? Tap <b>Speak</b> to spin a topic and practise for a couple of minutes.`,wait:'quest'},
+];
+let tour=null;
+function startTour(){
+  if(panel)setPanel(null);if(arrange.on){arrange.on=false;render();}
+  document.querySelectorAll('.tour-shade,.tour-card').forEach(e=>e.remove());
+  const shade=document.createElement('div'),card=document.createElement('div');shade.className='tour-shade';card.className='tour-card';card.setAttribute('role','dialog');
+  document.body.append(shade,card);tour={i:-1,shade,card,frame:0};tourGo(1);
+  const follow=()=>{if(!tour)return;placeTour();tour.frame=requestAnimationFrame(follow);};follow();
+}
+function tourGo(dir){
+  let i=tour.i+dir;while(TOUR[i]?.when&&!TOUR[i].when())i+=dir;
+  if(i>=TOUR.length){endTour(true);return;}
+  if(statsOpen&&TOUR[tour.i]?.wait==='needs')setStatsOpen(false);
+  tour.i=i;const st=TOUR[i],n=TOUR.filter(x=>!x.when||x.when()).length,pos=TOUR.slice(0,i+1).filter(x=>!x.when||x.when()).length;
+  tour.card.className='tour-card'+(st.wait?' waiting':'')+(st.target?'':' center');
+  tour.card.innerHTML=`<h3>${st.title}</h3><p>${st.body()}</p><div class="tour-foot"><span class="tour-dots">${pos} / ${n}</span><button class="tour-skip" data-tour="skip">Skip tour</button>${st.wait?'<button class="tour-later" data-tour="next">Skip step</button>':`<button class="tour-next" data-tour="next">${st.next||'Next'}</button>`}</div>`;
+  tour.card.querySelector('[data-tour="skip"]').onclick=()=>endTour(false);
+  tour.card.querySelector('[data-tour="next"]').onclick=()=>{
+    const nm=$('#tour-cat-name');if(nm&&nm.value.trim()){state.cat.name=nm.value.trim().slice(0,18);persist();}
+    tourGo(1);};
+  placeTour();
+}
+function placeTour(){
+  const st=TOUR[tour.i],el=st.target?.(),r=el&&(el.getBoundingClientRect?el.getBoundingClientRect():el),{shade,card}=tour,W=innerWidth,H=innerHeight;
+  if(!r||!r.width){shade.style.cssText=`left:${W/2}px;top:${H/2}px;width:0;height:0`;card.style.left=`${Math.max(12,(W-card.offsetWidth)/2)}px`;card.style.top=`${Math.max(12,(H-card.offsetHeight)/2)}px`;return;}
+  const p=6;shade.style.cssText=`left:${r.left-p}px;top:${r.top-p}px;width:${r.width+p*2}px;height:${r.height+p*2}px`;
+  const cw=card.offsetWidth,ch=card.offsetHeight,below=r.top+r.height/2<H/2;
+  card.style.left=`${Math.min(W-cw-12,Math.max(12,r.left+r.width/2-cw/2))}px`;
+  card.style.top=`${below?Math.min(H-ch-12,r.top+r.height+p+12):Math.max(12,r.top-p-12-ch)}px`;
+}
+function tourEvent(name){if(tour&&TOUR[tour.i]?.wait===name)setTimeout(()=>tour&&tourGo(1),name==='quest'?0:700);}
+function endTour(finished){
+  if(!tour)return;cancelAnimationFrame(tour.frame);tour.shade.remove();tour.card.remove();tour=null;
+  state.tourDone=true;save();if(finished)toast(`Have fun with ${state.cat.name}!`);
+}
+addEventListener('keydown',e=>{if(e.key==='Escape'&&tour)endTour(false);});
+
 render();
+// ---- Modals: farewell + adoption, headstone details, danger warning ----
+function showModal(html,wire){
+  closeModal();const sh=document.createElement('div');sh.className='modal-shade';sh.innerHTML=`<div class="modal" role="dialog" aria-modal="true">${html}</div>`;
+  document.body.appendChild(sh);sh.querySelector('[data-close]')?.addEventListener('click',closeModal);wire?.(sh);paintIcons();
+}
+function closeModal(){document.querySelector('.modal-shade')?.remove();}
+const longDate=d=>new Date(d+'T12:00:00').toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'});
+const daysBetween=(a,b)=>Math.max(1,dayDiff(a,b)+1);
+function showGrave(g){
+  showModal(`<h3>${esc(g.name)}</h3><p class="modal-sub">${cap(g.coat.replace('_',' '))} cat</p>
+    <p>${longDate(g.born)} – ${longDate(g.died)}<br>Lived ${daysBetween(g.born,g.died)} ${daysBetween(g.born,g.died)===1?'day':'days'} with you · ${g.sessions} ${g.sessions===1?'session':'sessions'} together</p>
+    <div class="modal-foot"><button class="modal-ok" data-close>Close</button></div>`);
+}
+function showFarewell(){
+  const g=state.graves[state.graves.length-1]||{name:state.cat.name,born:state.cat.born,died:today(),sessions:0};
+  showModal(`<h3>Goodbye, ${esc(g.name)}</h3><p>${esc(g.name)} went too long without care and has passed away. They lived ${daysBetween(g.born,g.died)} days with you, and you did ${g.sessions} speaking ${g.sessions===1?'session':'sessions'} together.</p>
+    <p>A headstone has been placed in the garden. Tap it any time to remember them.</p>
+    <div class="modal-foot"><button class="modal-ok" data-adopt>Adopt a kitten</button></div>`,sh=>sh.querySelector('[data-adopt]').onclick=showAdopt);
+}
+function showAdopt(){
+  let coat=CAT_COATS.find(k=>k!==state.cat.coat)||CAT_COATS[0];
+  showModal(`<h3>Adopt a kitten</h3><p>Your XP, coins, streak and journal carry on with your new cat.</p>
+    <label class="modal-field">Name<input id="adopt-name" maxlength="18" placeholder="Kitten name"></label>
+    <div class="coat-grid">${CAT_COATS.map(k=>`<button data-coat-pick="${k}" class="${k===coat?'active':''}" title="${cap(k.replace('_',' '))}" data-coat="${k}"><canvas width="64" height="64"></canvas></button>`).join('')}</div>
+    <div class="modal-foot"><button class="modal-ok" data-welcome>Welcome home</button></div>`,sh=>{
+      sh.querySelectorAll('[data-coat-pick]').forEach(b=>b.onclick=()=>{coat=b.dataset.coatPick;sh.querySelectorAll('[data-coat-pick]').forEach(x=>x.classList.toggle('active',x===b));});
+      sh.querySelector('[data-welcome]').onclick=()=>{const name=sh.querySelector('#adopt-name').value.trim().slice(0,18);if(!name){toast('Give your kitten a name first.');sh.querySelector('#adopt-name').focus();return;}
+        state.cat={...fresh().cat,name,coat,born:today(),lastUpdated:Date.now()};resetCatPlan();closeModal();catReaction={type:'cheer',started:performance.now()};persist();toast(`Welcome home, ${name}!`);};
+      setTimeout(()=>sh.querySelector('#adopt-name')?.focus(),50);});
+}
+// On opening: a heads-up if the cat is down to 1 heart or less.
+function dangerCheck(){
+  const c=state.cat;if(!c.alive){showFarewell();return;}
+  const h=healthOf(c);if(h>=25){backupCheck();return;}
+  const left=c.zeroSince?Math.max(0,GRACE_DAYS-(Date.now()-c.zeroSince)/DAY):null;
+  const when=left==null?'Their hearts are almost gone.':left<1?'Less than a day left to save them!':`${Math.ceil(left)} ${Math.ceil(left)===1?'day':'days'} left to save them.`;
+  showModal(`<h3>${esc(c.name)} is very weak</h3><p>${when} Feed them, refill the water and clean the litter.</p>
+    <div class="modal-foot"><button class="modal-later" data-close>Later</button><button class="modal-ok" data-care-now>Care now</button></div>`,
+    sh=>sh.querySelector('[data-care-now]').onclick=()=>{closeModal();careMenuOpen=true;const m=$('.care-menu');if(m)m.open=true;});
+}
+// Progress lives only in this browser, so nudge for a backup every two weeks once there's something to lose.
+function backupCheck(){
+  if(sessions().length<3)return;
+  const last=Math.max(state.lastBackup||0,state.backupSnooze||0);if(Date.now()-last<14*DAY)return;
+  showModal(`<h3>Back up your progress</h3><p>Your cat, coins and journal live only in this browser. A backup file lets you restore them if this browser’s data is ever cleared, or move to a new phone.</p>
+    <div class="modal-foot"><button class="modal-later" data-close>Later</button><button class="modal-ok" data-backup-now>Back up now</button></div>`,
+    sh=>{sh.querySelector('[data-close]').addEventListener('click',()=>{state.backupSnooze=Date.now()-7*DAY;save();});sh.querySelector('[data-backup-now]').onclick=()=>{exportData();closeModal();};});
+}
+// Test helper: skip time ahead to see needs drop. In the console: cqSkip(24); or open the app with #debug.
+window.cqSkip=hours=>{state.cat.lastUpdated-=hours*3600000;if(state.cat.zeroSince)state.cat.zeroSince-=hours*3600000;state=decayCat(state);save();setRoomGraves(state.graves);render();if(!state.cat.alive)showFarewell();};
+
+if(!state.tourDone&&!state.history.length)roomAssetsReady.then(()=>setTimeout(startTour,600),()=>{});
+else roomAssetsReady.then(()=>setTimeout(dangerCheck,700),()=>{});

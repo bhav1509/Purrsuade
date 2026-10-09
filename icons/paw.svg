@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 0.75 102 102">
+  <!-- Ginger tabby paw, a little taller than wide (92 : 97). Silhouette = rounded body, four round
+       toes (middle two higher) and a filler behind the toes. Drawn twice: thick outline strokes
+       first, then the fills on top, so only the outer outline shows. -->
+  <defs>
+    <g id="shape">
+      <rect x="4" y="30" width="92" height="70" rx="25"/>
+      <ellipse cx="50" cy="30" rx="26" ry="11"/>
+      <circle cx="17" cy="30" r="13"/>
+      <circle cx="38.5" cy="17" r="13.5"/>
+      <circle cx="61.5" cy="17" r="13.5"/>
+      <circle cx="83" cy="30" r="13"/>
+    </g>
+    <clipPath id="inside">
+      <rect x="4" y="30" width="92" height="70" rx="25"/>
+      <ellipse cx="50" cy="30" rx="26" ry="11"/>
+      <circle cx="17" cy="30" r="13"/><circle cx="38.5" cy="17" r="13.5"/><circle cx="61.5" cy="17" r="13.5"/><circle cx="83" cy="30" r="13"/>
+    </clipPath>
+    <linearGradient id="fur" gradientUnits="userSpaceOnUse" x1="0" y1="3" x2="0" y2="100">
+      <stop offset="0" stop-color="#ffbe7a"/>
+      <stop offset="1" stop-color="#f39445"/>
+    </linearGradient>
+    <linearGradient id="bean" gradientUnits="userSpaceOnUse" x1="0" y1="10" x2="0" y2="64">
+      <stop offset="0" stop-color="#b8506a"/>
+      <stop offset="1" stop-color="#8f3550"/>
+    </linearGradient>
+  </defs>
+  <use href="#shape" fill="#3b2420" stroke="#3b2420" stroke-width="5.5" stroke-linejoin="round"/>
+  <use href="#shape" fill="url(#fur)"/>
+  <!-- tabby stripes coming in from the sides -->
+  <g clip-path="url(#inside)" fill="#d9712c">
+    <path d="M1 74 q12 -1.5 16 3.5 q-7 3.5 -16 2.5 z"/>
+    <path d="M1 85 q10 -0.5 13 4 q-6 3 -13 2 z"/>
+    <path d="M99 74 q-12 -1.5 -16 3.5 q7 3.5 16 2.5 z"/>
+    <path d="M99 85 q-10 -0.5 -13 4 q6 3 13 2 z"/>
+  </g>
+  <g fill="url(#bean)">
+    <!-- toe beans, one per toe -->
+    <ellipse cx="18" cy="32.5" rx="5.4" ry="6.8" transform="rotate(-18 18 32.5)"/>
+    <ellipse cx="38.8" cy="19.5" rx="5.6" ry="7.2" transform="rotate(-6 38.8 19.5)"/>
+    <ellipse cx="61.2" cy="19.5" rx="5.6" ry="7.2" transform="rotate(6 61.2 19.5)"/>
+    <ellipse cx="82" cy="32.5" rx="5.4" ry="6.8" transform="rotate(18 82 32.5)"/>
+    <!-- main pad: rounded on top, three lobes along the bottom -->
+    <path d="M50 38 C59 38 66.8 45.3 67.2 52.8 C67.5 59 63.2 62.2 59.2 60.6 C57.3 62.7 53.8 63.8 50 63.8 C46.2 63.8 42.7 62.7 40.8 60.6 C36.8 62.2 32.5 59 32.8 52.8 C33.2 45.3 41 38 50 38 Z"/>
+  </g>
+  <!-- small shine on the beans -->
+  <g fill="#f6c6d2">
+    <ellipse cx="43.8" cy="44.6" rx="3.6" ry="2.1" transform="rotate(-25 43.8 44.6)"/>
+    <ellipse cx="37.2" cy="16.4" rx="1.6" ry="2.2"/>
+    <ellipse cx="59.6" cy="16.4" rx="1.6" ry="2.2"/>
+  </g>
+</svg>

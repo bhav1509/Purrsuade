@@ -1,13 +1,29 @@
 {
-  "name": "Communication Quest",
-  "short_name": "Comm Quest",
-  "description": "A gamified daily speaking practice companion.",
+  "name": "Purrsuade",
+  "short_name": "Purrsuade",
+  "description": "Daily speaking practice with a pixel cat to look after.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#15121e",
   "theme_color": "#15121e",
   "icons": [
-    {"src":"icons/icon-192.png","sizes":"192x192","type":"image/png"},
-    {"src":"icons/icon-512.png","sizes":"512x512","type":"image/png"}
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

@@ -1,6 +1,6 @@
 # To-do list
 
-Ideas for improving Communication Quest, roughly in priority order.
+Ideas for improving Purrsuade, roughly in priority order.
 
 ## Fixes
 - [x] **Save a quest in progress.** The current quest (topic, transcript, scores) only lives in memory, so a reload or closing the app on a phone loses it.

@@ -3,6 +3,7 @@
 // both 0–180. Screen = floorOrigin + (x - y, (x + y) / 2 - z). Everything is drawn 1:1
 // into room space, then the whole room is scaled to fit the canvas.
 const atlasImage=new Image();
+let atlasPixels=null;
 const roomAssetsReady=new Promise((resolve,reject)=>{atlasImage.onload=resolve;atlasImage.onerror=()=>reject(new Error('Could not load cat-game-atlas.png'));});
 atlasImage.src=new URL('assets/cat-game-atlas.png',document.currentScript.src).href;
 let roomImagesLoaded=false;
@@ -12,7 +13,7 @@ const CAT_COATS=Object.keys(CAT_ATLAS.cats);
 const ROOM_STYLES=Object.keys(CAT_ATLAS.rooms);
 const CARE_ICONS={food:'bowl_sky_kibble',water:'bowl_blush_water',litter:'litter_tray_mint',play:'toy_yarn_pink',treat:'treat_jar_pink'};
 // What the cat's thought bubble shows when that need is lowest.
-const NEED_ICONS={hunger:'bowl_sky_empty',thirst:'bowl_blush_water',cleanliness:'litter_scoop_mint',happiness:'toy_yarn_pink'};
+const NEED_ICONS={hunger:'bowl_sky_kibble',thirst:'bowl_blush_water',cleanliness:'litter_scoop_mint',happiness:'toy_yarn_pink'};
 
 const ROOM={
   walls:[['window_curtain_rose_left',40,50],['art_plant_left',122,66],['art_heart_left',150,74],['window_blind_white_right',30,54],['art_cat_right',100,80],['art_waves_right',124,90],['wall_clock_blue_right',150,96]],
@@ -29,8 +30,8 @@ const ROOM_ITEMS=[
   {id:'lamp',sprite:'floor_lamp_cream',x:10,y:112,pad:6,shadow:7},
   {id:'cushion',sprite:'floor_cushion_lavender',x:170,y:118,pad:9,shadow:9,spot:[-20,-6,0,true]},
   {id:'litter',sprite:'litter_tray_mint',x:160,y:62,pad:14,spot:[0,0,3,false]},
-  {id:'food',sprite:c=>c.hunger>20?'bowl_sky_kibble':'bowl_sky_empty',x:124,y:160,pad:6,shadow:6,spot:[-6,2,0,false]},
-  {id:'water',sprite:c=>c.thirst>20?'bowl_blush_water':'bowl_blush_empty',x:150,y:146,pad:6,shadow:6,spot:[-6,2,0,false]},
+  {id:'food',sprite:'bowl_sky_kibble',bowl:['bowl_sky_kibble','bowl_sky_empty','hunger'],x:124,y:160,pad:6,shadow:6,spot:[-6,2,0,false]},
+  {id:'water',sprite:'bowl_blush_water',bowl:['bowl_blush_water','bowl_blush_empty','thirst'],x:150,y:146,pad:6,shadow:6,spot:[-6,2,0,false]},
   {id:'yarn',sprite:'toy_yarn_pink',x:84,y:132,pad:4,spot:[-6,0,0,false]},
 ];
 // Where the cat stands for each spot: [x, y, z, face left]. Item spots follow the layout.
@@ -137,6 +138,7 @@ function poseAt(plan,time){
 const IDLE_STEPS={
   happy:[{at:'bed',anim:'sleep',dur:9},{at:'bed',anim:'idle',dur:1.5},{to:'rug'},{at:'rug',anim:'sit',dur:4},{at:'rug',anim:'idle',dur:1.5},{to:'window'},{at:'window',anim:'sit',dur:4},{to:'cushion'},{at:'cushion',anim:'idle',dur:2.5},{to:'bed'}],
   tired:[{at:'bed',anim:'sleep',dur:10}],
+  sick:[{at:'bed',anim:'sleep',dur:12}],
 };
 const REACTION_STEPS={
   food:[{to:'food'},{at:'food',anim:'sit',dur:3,hearts:true}],
@@ -148,8 +150,11 @@ const REACTION_STEPS={
   cheer:[{to:'rug'},{at:'rug',anim:'jump',dur:.6},{at:'rug',anim:'jump',dur:.6},{at:'rug',anim:'jump',dur:.6},{at:'rug',anim:'sit',dur:2,hearts:true}],
 };
 let catPlan=null,planReaction=null,planMood=null;
+function resetCatPlan(){catPlan=null;planReaction=null;planMood=null;}
 function currentPose(time,cat,reaction){
-  const mood=cat.happiness<25?'tired':'happy';
+  // Below 1 heart the cat is sick: it stays curled up in bed and ignores toys and treats.
+  const health=(cat.hunger+cat.thirst+cat.cleanliness+cat.happiness)/4,mood=health<15?'sick':cat.happiness<25?'tired':'happy';
+  if(reaction&&mood==='sick'&&['play','treat','cheer'].includes(reaction.type))planReaction=reaction;
   if(reaction&&reaction!==planReaction&&REACTION_STEPS[reaction.type]){
     const p=catPlan?poseAt(catPlan,reaction.started):null,from=p?[p.x,p.y,p.z,p.flip]:SPOT.bed;
     catPlan=buildPlan(reaction.started,from,[...REACTION_STEPS[reaction.type],{to:mood==='happy'?'rug':'bed'}],false);planReaction=reaction;
@@ -176,14 +181,26 @@ function drawHeart(ctx,X,Y,time){
   ctx.fillRect(x,y,2,2);ctx.fillRect(x+4,y,2,2);ctx.fillRect(x,y+2,6,2);ctx.fillRect(x+1,y+4,4,1);ctx.fillRect(x+2,y+5,2,1);
 }
 // Pixel speech bubble above the cat showing the sprite of what it wants.
+// Thought bubble: a puffy pixel cloud (cached per size) with two little puffs trailing to the cat.
+const cloudCache={};
+function thoughtCloud(w,h){
+  const key=w+'x'+h;if(cloudCache[key])return cloudCache[key];
+  const M=6,c=document.createElement('canvas');c.width=w+M*2;c.height=h+M*2;const g=c.getContext('2d');
+  const blobs=[[w/2,h/2,w/2-2.5,h/2-2],[w*.27,h*.3,h*.3,h*.3],[w*.52,h*.22,h*.34,h*.34],[w*.76,h*.32,h*.28,h*.28],[w*.12,h*.56,h*.28,h*.28],[w*.88,h*.58,h*.27,h*.27],[w*.34,h*.78,h*.26,h*.24],[w*.66,h*.8,h*.25,h*.23]];
+  const inside=(x,y)=>blobs.some(([cx,cy,rx,ry])=>((x+.5-cx)/rx)**2+((y+.5-cy)/ry)**2<=1);
+  for(let y=-M;y<h+M;y++)for(let x=-M;x<w+M;x++){
+    if(inside(x,y)){g.fillStyle=inside(x,y+2)?'#fffaf2':'#efe4d8';g.fillRect(x+M,y+M,1,1);}
+    else if([[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]].some(([a,b2])=>inside(x+a,y+b2))){g.fillStyle='#5b4a44';g.fillRect(x+M,y+M,1,1);}}
+  return cloudCache[key]=c;
+}
 function drawThought(ctx,X,Y,icon,time){
-  const s=CAT_ATLAS.sprites[icon],w=s.w+8,h=s.h+8,bob=Math.floor(time/600)%2;
-  const x=Math.round(X)+2,y=Math.round(Y)-36-h-bob;
-  ctx.fillStyle='#5b4a44';ctx.fillRect(x+1,y,w-2,h);ctx.fillRect(x,y+1,w,h-2);
-  ctx.fillStyle='#fffaf2';ctx.fillRect(x+1,y+1,w-2,h-2);
-  ctx.fillStyle='#5b4a44';ctx.fillRect(x+1,y+h+1,3,3);ctx.fillRect(x-1,y+h+5,2,2);
-  ctx.fillStyle='#fffaf2';ctx.fillRect(x+2,y+h+2,1,1);
-  ctx.drawImage(atlasImage,s.x,s.y,s.w,s.h,x+4,y+4,s.w,s.h);
+  const s=CAT_ATLAS.sprites[icon],w=s.w+14,h=s.h+12,bob=Math.floor(time/600)%2;
+  const x=Math.round(X)+1,y=Math.round(Y)-38-h-bob;
+  ctx.drawImage(thoughtCloud(w,h),x-6,y-6);
+  // trailing puffs, getting smaller towards the cat's head
+  const puff=(px,py,r)=>{ctx.fillStyle='#5b4a44';ctx.fillRect(px-r,py-r+1,r*2+1,r*2-1);ctx.fillRect(px-r+1,py-r,r*2-1,r*2+1);ctx.fillStyle='#fffaf2';ctx.fillRect(px-r+1,py-r+1,r*2-1,r*2-1);};
+  puff(x+4,y+h+3,2);puff(x+1,y+h+8,1);
+  ctx.drawImage(atlasImage,s.x,s.y,s.w,s.h,x+Math.round((w-s.w)/2),y+Math.round((h-s.h)/2),s.w,s.h);
 }
 
 // ---- Camera: optional pan (all devices) and pinch-zoom (touch only) per canvas ----
@@ -249,7 +266,7 @@ function enableRoomCamera(canvas,{pinch,onTap,onChange,resetButton,zoomIn,zoomOu
     start=snap();canvas.classList.add('dragging');
   };
   canvas.onpointermove=e=>{
-    if(!pts.has(e.pointerId)){canvas.style.cursor=arrange.on?(itemAt(canvas,e.clientX,e.clientY)?'grab':''):catHit(canvas,e.clientX,e.clientY)?'pointer':'';return;}
+    if(!pts.has(e.pointerId)){canvas.style.cursor=arrange.on?(itemAt(canvas,e.clientX,e.clientY)||graveAt(canvas,e.clientX,e.clientY)?'grab':''):catHit(canvas,e.clientX,e.clientY)?'pointer':'';return;}
     pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(held){moved=true;held.move(e);onChange?.();return;}
     const now=snap();
@@ -288,6 +305,42 @@ const GARDEN_PAD={x:200,top:20,bottom:110},GARDEN_G=100;
 let gardenLayer=null,gardenTint={night:-1,canvas:null};
 function hash(n){n=Math.sin(n*127.1+311.7)*43758.5453;return n-Math.floor(n);}
 function pixelBlob(ctx,X,Y,rx,ry,col){for(let dy=-ry;dy<=ry;dy++){const h=Math.round(rx*Math.sqrt(Math.max(0,1-(dy/ry)**2)));ctx.fillStyle=col;ctx.fillRect(Math.round(X)-h,Math.round(Y)+dy,h*2,1);}}
+// ---- Cemetery: a headstone in the front-left garden for each cat that has died (newest six shown) ----
+// Default spots in the front-left garden, near the path; each can be moved in arrange mode (layout key 'g<id>').
+const GRAVE_SPOTS=[[150,202],[124,202],[98,202],[150,226],[124,226],[98,226]];
+let roomGraves=[];
+function setRoomGraves(list){roomGraves=Array.isArray(list)?list:[];}
+// The newest six graves with their positions (moved or default).
+function shownGraves(){return roomGraves.slice(-GRAVE_SPOTS.length).map((gr,i)=>{const [x,y]=roomLayout['g'+gr.id]||GRAVE_SPOTS[i];return {gr,x,y};});}
+// Graves get their own layer (rebuilt only when they move), drawn over the garden in room space.
+// Graves in front of the room (x or y past its front walls) are drawn over it; the rest behind it.
+const graveLayers={};
+function gravesFor(night,front){
+  const G=gardenLayer,list=shownGraves().filter(g=>(g.x>=190||g.y>=190)===front),n=Math.round(night*20)/20,key=JSON.stringify([list.map(g=>[g.gr.id,g.x,g.y]),arrange.drag,n,roomStyle]);
+  if(!G||!list.length)return null;
+  const old=graveLayers[front];if(old?._key===key)return old;
+  const c=old&&old.width===G.width&&old.height===G.height?old:document.createElement('canvas');c.width=G.width;c.height=G.height;
+  const g=c.getContext('2d');g.clearRect(0,0,c.width,c.height);g.save();g.translate(GARDEN_PAD.x,GARDEN_PAD.top);
+  list.slice().sort((a,b)=>(a.x+a.y)-(b.x+b.y)).forEach(({gr,x,y})=>drawGrave(g,x,y,arrange.drag==='g'+gr.id));
+  g.restore();
+  if(n>0){g.globalCompositeOperation='source-atop';g.fillStyle=`rgba(38,30,86,${.5*n})`;g.fillRect(0,0,c.width,c.height);g.globalCompositeOperation='source-over';}
+  c._key=key;return graveLayers[front]=c;
+}
+const STONE=['....#######....','...#hhssssd#...','..#hhsssssssd#.','.#hhssssssssd#.','.#hhsssessssd#.','.#hhsssessssd#.','.#hhseeeeessd#.','.#hhsssessssd#.','.#hhsssessssd#.','.#hhsssessssd#.','.#hhsssessssd#.','.#hhssssssssd#.','.#hhssssssssd#.','.#hheeeeeeesd#.','.#hhssssssssd#.','.#hhseeeeessd#.','.#hhssssssssd#.','###############','#bbbbbbbbbbbbb#','###############'],STONE_COL={'#':'#4d4660',h:'#e4e0ee',s:'#c3bdd3',d:'#9d96b2',e:'#7f7896',b:'#a8a1bd'};
+function drawGrave(g,x,y,lifted){
+  const [X0,Y0]=project(x,y,lifted?3:0),X=Math.round(X0),Y=Math.round(Y0),H=STONE.length;
+  pixelBlob(g,X,Y+2,13,4,'#6f9f5c');pixelBlob(g,X,Y+1,12,3,'#8a6646');pixelBlob(g,X,Y,11,3,'#9ccf7f');
+  STONE.forEach((row,j)=>[...row].forEach((c,i)=>{if(c!=='.'){g.fillStyle=STONE_COL[c];g.fillRect(X-7+i,Y-H+1+j,1,1);}}));
+  [['#ff9ec4',-10],['#ffe39a',9],['#fbf6ee',-8],['#b4a2ff',11]].forEach(([col,dx])=>{g.fillStyle='#5d9a4c';g.fillRect(X+dx,Y-1,1,3);g.fillStyle=col;g.fillRect(X+dx-1,Y-2,3,1);g.fillRect(X+dx,Y-3,1,3);});
+}
+// The grave under a pointer, or null. Graves live in room space like everything else.
+function graveAt(canvas,clientX,clientY){
+  const p=roomPoint(canvas,clientX,clientY);if(!p)return null;const shown=shownGraves();
+  const hits=shown.filter(({x,y})=>{const [X,Y]=project(x,y);return p[0]>=X-11&&p[0]<=X+11&&p[1]>=Y-STONE.length-2&&p[1]<=Y+4;}).sort((a,c)=>(c.x+c.y)-(a.x+a.y));
+  if(hits.length)return hits[0].gr;
+  return null;
+}
+
 function buildGarden(){
   const rm=CAT_ATLAS.rooms[roomStyle],P=GARDEN_PAD,c=document.createElement('canvas');
   c.width=rm.w+P.x*2;c.height=rm.h+P.top+P.bottom;const g=c.getContext('2d');g.translate(P.x,P.top);
@@ -329,7 +382,8 @@ function buildGarden(){
   return c;
 }
 function gardenFor(night){
-  if(!gardenLayer||gardenLayer._style!==roomStyle){gardenLayer=buildGarden();gardenLayer._style=roomStyle;gardenTint.night=-1;}
+  const key=roomStyle;
+  if(!gardenLayer||gardenLayer._key!==key){gardenLayer=buildGarden();gardenLayer._key=key;gardenTint.night=-1;gardenTint.style=null;}
   if(night<=0)return gardenLayer;
   const n=Math.round(night*20)/20;
   if(gardenTint.night!==n||gardenTint.style!==roomStyle){const c=gardenTint.canvas||(gardenTint.canvas=document.createElement('canvas'));c.width=gardenLayer.width;c.height=gardenLayer.height;
@@ -353,14 +407,17 @@ function drawRoom(canvas,time,cat,reaction,style){
   const pose=cat.alive?currentPose(time,cat,reaction):null;
   // Everything on the floor is depth-sorted by x + y (further back first).
   // Arrange mode: a faint floor grid, and a footprint under the item being moved.
-  if(arrange.on){drawFloorGrid(b);if(arrange.drag){const it=ROOM_ITEMS.find(i=>i.id===arrange.drag),[x,y]=itemPos(it);drawFootprint(b,x,y,Math.max(6,it.pad));}}
+  if(arrange.on){drawFloorGrid(b);const it=arrange.drag&&ROOM_ITEMS.find(i=>i.id===arrange.drag);if(it){const [x,y]=itemPos(it);drawFootprint(b,x,y,Math.max(6,it.pad));}}
   // Rugs lie flat under everything; the rest is depth-sorted by x + y (further back first).
   const items=[];
   ROOM_ITEMS.forEach((it,i)=>{
     if(it.id==='yarn'&&pose?.hideYarn)return;
     const [x,y]=itemPos(it),lift=arrange.drag===it.id?3:0,name=typeof it.sprite==='function'?it.sprite(cat):it.sprite;
-    const draw=()=>{drawShadow(b,x,y,0,it.shadow);drawSprite(b,name,x,y,lift);(it.carries||[]).forEach(([n,dx,dy,z])=>drawSprite(b,n,x+dx,y+dy,z+lift));
-      if(it.id==='litter'&&cat.cleanliness<35)drawLitterMess(b,x,y);};
+    const draw=()=>{drawShadow(b,x,y,0,it.shadow);
+      if(it.bowl){const [full,empty,need]=it.bowl,lv=cat[need],frac=lv>60?1:lv>30?.6:lv>10?.3:0,s=CAT_ATLAS.sprites[full],[X,Y]=project(x,y,lift);
+        b.drawImage(bowlLevel(full,empty,frac),Math.round(X-s.anchor[0]),Math.round(Y-s.anchor[1]));}
+      else drawSprite(b,name,x,y,lift);(it.carries||[]).forEach(([n,dx,dy,z])=>drawSprite(b,n,x+dx,y+dy,z+lift));
+      if(it.id==='litter')drawLitterMess(b,x,y,cat.cleanliness,time);};
     if(it.flat)draw();else items.push({depth:x+y+i/1000+(lift?400:0),draw});
   });
   let catXY=null;
@@ -401,11 +458,36 @@ function drawRoom(canvas,time,cat,reaction,style){
   ctx.imageSmoothingEnabled=false;
   const gl=gardenFor(night),P=GARDEN_PAD;
   ctx.drawImage(gl,Math.round(view.x-P.x*view.scale),Math.round(view.y-P.top*view.scale),Math.round(gl.width*view.scale),Math.round(gl.height*view.scale));
+  const layer=c=>{if(c)ctx.drawImage(c,Math.round(view.x-P.x*view.scale),Math.round(view.y-P.top*view.scale),Math.round(c.width*view.scale),Math.round(c.height*view.scale));};
+  layer(gravesFor(night,false));
   ctx.drawImage(roomBuf,view.x,view.y,Math.round(rm.w*view.scale),Math.round(rm.h*view.scale));
+  layer(gravesFor(night,true));
 }
-function drawLitterMess(ctx,x,y){
-  const [X,Y]=project(x,y);ctx.fillStyle='#8e7967';
-  [[-10,-4],[3,-2],[9,-7],[-3,-8]].forEach(([dx,dy])=>ctx.fillRect(Math.round(X)+dx,Math.round(Y)+dy,2,2));
+// Dirty litter: poop piles appear as Clean drops (below 60 / 40 / 20), smell lines below 40, flies below 20.
+const POOP=['..a..','.aba.','abbba','.ccc.'],POOP_COL={a:'#8a6244',b:'#6b4a32',c:'#4e3524'};
+function drawLitterMess(ctx,x,y,clean,time){
+  const [X0,Y0]=project(x,y),X=Math.round(X0),Y=Math.round(Y0),n=clean<20?3:clean<40?2:clean<60?1:0;
+  [[-9,-7],[4,-4],[-2,-11]].slice(0,n).forEach(([dx,dy])=>POOP.forEach((row,j)=>[...row].forEach((c,i)=>{if(c!=='.'){ctx.fillStyle=POOP_COL[c];ctx.fillRect(X+dx+i,Y+dy+j,1,1);}})));
+  const t=time/1000;
+  if(clean<40)for(let k=0;k<3;k++){const ph=(t*7+k*5)%14,bx=X-7+k*7;
+    for(let j=0;j<7;j++){const yy=Y-16-ph-j*1.4,a=Math.max(0,.75-(ph+j)/20);ctx.fillStyle=`rgba(120,190,70,${Math.min(1,a*1.3)})`;const sx=Math.round(bx+Math.sin((yy+t*6)*.7)*1.6);ctx.fillRect(sx,Math.round(yy),2,1);}}
+  if(clean<20)for(let k=0;k<2;k++){const fx=X+Math.cos(t*3.1+k*3)*11,fy=Y-15+Math.sin(t*4.7+k*1.7)*4;
+    ctx.fillStyle='#2b2230';ctx.fillRect(Math.round(fx),Math.round(fy),1,1);if(Math.floor(t*14+k)%2){ctx.fillStyle='rgba(235,240,255,.85)';ctx.fillRect(Math.round(fx)-1,Math.round(fy)-1,1,1);ctx.fillRect(Math.round(fx)+1,Math.round(fy)-1,1,1);}}
+}
+// Bowl with its food / water at a fill level: the empty bowl, plus the lower part of whatever the full
+// sprite adds on top (kibble or water), so less is visible as the need drops. Cached per level.
+const bowlCache={};
+function atlasData(){if(!atlasPixels){const c=document.createElement('canvas');c.width=atlasImage.width;c.height=atlasImage.height;const x2=c.getContext('2d');x2.drawImage(atlasImage,0,0);atlasPixels=x2.getImageData(0,0,c.width,c.height);}return atlasPixels;}
+function bowlLevel(full,empty,frac){
+  const key=full+frac;if(bowlCache[key])return bowlCache[key];
+  const F=CAT_ATLAS.sprites[full],E=CAT_ATLAS.sprites[empty],A=atlasData(),w=F.w,h=F.h,c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d'),img=x.createImageData(w,h),px=(s,i,j)=>{const o=((s.y+j)*A.width+s.x+i)*4;return [A.data[o],A.data[o+1],A.data[o+2],A.data[o+3]];};
+  let x0=w,x1=-1,y0=h,y1=-1;const diff=[];
+  for(let j=0;j<h;j++)for(let i=0;i<w;i++){const f=px(F,i,j),e=(i<E.w&&j<E.h)?px(E,i,j):[0,0,0,0],d=f.some((v,k)=>Math.abs(v-e[k])>8);diff.push(d);if(d){x0=Math.min(x0,i);x1=Math.max(x1,i);y0=Math.min(y0,j);y1=Math.max(y1,j);}}
+  // Less food / water = a smaller pile or puddle, sinking towards the bottom of the bowl.
+  const rx=(x1-x0+1)/2,ry=(y1-y0+1)/2,cx=x0+rx-.5,cy=y0+ry-.5+ry*(1-frac)*.6,k=Math.sqrt(frac);
+  for(let j=0;j<h;j++)for(let i=0;i<w;i++){const o=(j*w+i)*4,inside=frac>0&&((i-cx)/(rx*k+.5))**2+((j-cy)/(ry*k+.5))**2<=1,use=diff[j*w+i]&&inside?px(F,i,j):(i<E.w&&j<E.h?px(E,i,j):[0,0,0,0]);img.data.set(use,o);}
+  x.putImageData(img,0,0);return bowlCache[key]=c;
 }
 // ---- Arrange mode: drag floor items around; positions snap to a 2-unit grid inside the room ----
 const arrange={on:false,drag:null};
@@ -424,11 +506,10 @@ function roomPoint(canvas,clientX,clientY){
 }
 function floorAt(px,py){const [ox,oy]=CAT_ATLAS.rooms[roomStyle].floorOrigin,a=px-ox,c=2*(py-oy);return [(a+c)/2,(c-a)/2];}
 // Opaque-pixel test against the atlas, so a click on a bed's empty corner doesn't grab it.
-let atlasPixels=null;
 function spriteHit(name,x,y,z,px,py){
   const s=CAT_ATLAS.sprites[name],[X,Y]=project(x,y,z),sx=Math.floor(px-(Math.round(X-s.anchor[0]))),sy=Math.floor(py-(Math.round(Y-s.anchor[1])));
   if(sx<0||sy<0||sx>=s.w||sy>=s.h)return false;
-  if(!atlasPixels){const c=document.createElement('canvas');c.width=atlasImage.width;c.height=atlasImage.height;const x2=c.getContext('2d');x2.drawImage(atlasImage,0,0);atlasPixels=x2.getImageData(0,0,c.width,c.height);}
+  atlasData();
   return atlasPixels.data[((s.y+sy)*atlasPixels.width+(s.x+sx))*4+3]>40;
 }
 // Front-most item under the pointer (the rug only if nothing stands on that pixel).
@@ -440,7 +521,23 @@ function itemAt(canvas,clientX,clientY){
   return null;
 }
 // Start dragging the item under the pointer; returns move/end handlers, or null if nothing is there.
+// Graves stay on the garden island and out of the room.
+function clampGrave(x,y){
+  const lo=-GARDEN_G+14,hi=180+GARDEN_G-14;x=Math.max(lo,Math.min(hi,x));y=Math.max(lo,Math.min(hi,y));
+  if(x>-16&&x<196&&y>-16&&y<196){const opts=[[-16,y],[196,y],[x,-16],[x,196]];[x,y]=opts.sort((a,b)=>Math.hypot(a[0]-x,a[1]-y)-Math.hypot(b[0]-x,b[1]-y))[0];}
+  return [Math.round(x/2)*2,Math.round(y/2)*2];
+}
+function grabGrave(canvas,e,{onMove,onDrop}={}){
+  const gr=graveAt(canvas,e.clientX,e.clientY);if(!gr)return null;
+  const g=shownGraves().find(v=>v.gr===gr),p=roomPoint(canvas,e.clientX,e.clientY),[fx,fy]=floorAt(...p),off=[g.x-fx,g.y-fy],key='g'+gr.id;
+  arrange.drag=key;
+  return {
+    move(ev){const q=roomPoint(canvas,ev.clientX,ev.clientY);if(!q)return;const [gx,gy]=floorAt(...q);roomLayout={...roomLayout,[key]:clampGrave(gx+off[0],gy+off[1])};onMove?.();},
+    end(){arrange.drag=null;onDrop?.(roomLayout,key);},
+  };
+}
 function grabItem(canvas,e,{onMove,onDrop}={}){
+  const grave=grabGrave(canvas,e,{onMove,onDrop});if(grave)return grave;
   const it=itemAt(canvas,e.clientX,e.clientY);if(!it)return null;
   const p=roomPoint(canvas,e.clientX,e.clientY),[fx,fy]=floorAt(...p),[x0,y0]=itemPos(it),off=[x0-fx,y0-fy];
   arrange.drag=it.id;

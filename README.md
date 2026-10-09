@@ -1,4 +1,4 @@
-# Communication Quest
+# Purrsuade
 
 A cozy speaking-practice game. Spin a topic, speak for a couple of minutes, get feedback
 from an AI, and earn coins to look after your pixel cat.
@@ -18,8 +18,8 @@ It's a web app you can install like a normal app (full screen, works offline).
 2. **Speak:** a short planning countdown, then talk while a timer tracks your target length.
    Your words are written out for you.
 3. **Coach:** tap **Copy for AI** (or **Share to app** on a phone), paste it into ChatGPT,
-   Claude or Gemini, then paste the reply back. The scores fill in automatically.
-4. **Reflect:** rate how it felt and complete the quest for XP and coins.
+   Claude or Gemini, then paste the reply back. The scores fill in automatically; complete the
+   quest for XP and coins.
 
 Unfinished quests are saved to the journal as incomplete at midnight.
 
