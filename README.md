@@ -3,7 +3,7 @@
 A cozy speaking-practice game. Spin a topic, speak for a couple of minutes, get feedback
 from an AI, and earn coins to look after your pixel cat.
 
-**Play it:** https://bhav1509.github.io/communication-quest/
+**Play it:** https://bhav1509.github.io/Purrsuade/
 
 ## Install it
 It's a web app you can install like a normal app (full screen, works offline).
