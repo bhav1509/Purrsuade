@@ -17,9 +17,9 @@ It's a web app you can install like a normal app (full screen, works offline).
 1. **Topic:** spin the wheel for today's topic (one free reroll).
 2. **Speak:** a short planning countdown, then talk while a timer tracks your target length.
    Your words are written out for you.
-3. **Coach:** tap **Copy for AI** (or **Share to app** on a phone), paste it into ChatGPT,
-   Claude or Gemini, then paste the reply back. The scores fill in automatically; complete the
-   quest for XP and coins.
+3. **Feedback:** tap your AI app (ChatGPT, Claude, Gemini or another). Your talk opens there
+   ready to send. Copy the AI's answer, come back and tap **Paste the answer**: the scores and key
+   points fill in automatically. Complete the quest for XP and coins (or skip feedback for the day).
 
 Unfinished quests are saved to the journal as incomplete at midnight.
 
@@ -34,7 +34,7 @@ Switch in Settings → Transcription.
 ## Privacy
 Everything stays on your device: there are no accounts and no server. High-accuracy
 transcription runs locally. Quick transcription uses the browser's speech service (Chrome
-sends audio to Google). Feedback only goes to an AI when you copy or share it yourself.
+sends audio to Google). Feedback only goes to an AI when you send it yourself.
 
 Progress lives in that browser on that device, so use Settings → **Export** now and then to
 keep a backup (and **Import** to restore or move devices).

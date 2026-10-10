@@ -444,7 +444,12 @@ label.grow .field-msg{top:-3px;right:0}
 .chips b.ok{color:#1d1830;background:var(--mint);border-color:transparent}
 
 /* First-run tour */
-.tour-shade{position:fixed;z-index:60;pointer-events:none;box-shadow:0 0 0 200vmax rgba(12,9,22,.62),0 0 0 3px var(--butter)}
+.tour-shade{position:fixed;z-index:60;pointer-events:none;box-shadow:0 0 0 200vmax rgba(10,7,18,.8),0 0 0 4px var(--butter),0 0 22px 8px rgba(255,227,154,.55)}
+.tour-shade::after{content:'';position:absolute;inset:-4px;box-shadow:0 0 0 4px var(--butter);animation:tourRing 1.2s ease-out infinite}
+@keyframes tourRing{from{opacity:.9;transform:scale(1)}to{opacity:0;transform:scale(1.35)}}
+.tour-card::before{content:'';position:absolute;left:calc(var(--ax,50%) - 10px);border:10px solid transparent;display:none}
+.tour-card[data-side="below"]::before{display:block;top:-23px;border-bottom-color:var(--butter)}
+.tour-card[data-side="above"]::before{display:block;bottom:-23px;border-top-color:var(--butter)}
 .tour-card{position:fixed;z-index:61;width:min(320px,calc(100vw - 24px));padding:14px 14px 12px;color:var(--text);background:#221c32;font-family:'Jersey 10',ui-monospace,monospace;letter-spacing:.02em;
   box-shadow:0 -3px 0 0 var(--butter),0 3px 0 0 var(--butter),-3px 0 0 0 var(--butter),3px 0 0 0 var(--butter),0 10px 30px #0008}
 .tour-card h3{margin:0 0 6px;font-weight:400;font-size:26px;color:var(--butter)}
@@ -490,3 +495,17 @@ label.grow .field-msg{top:-3px;right:0}
 .lv-bar{display:block;width:36px;height:7px;background:#0000004d;box-shadow:0 0 0 2px #120e1b}
 .lv-bar b{display:block;height:100%;background:var(--butter)}
 @media(max-width:520px){.room-status .chip.level{padding:0 8px}.lv-bar{display:none}}
+
+/* Feedback step: three numbered steps, AI app buttons, paste */
+.coach-step{display:flex;gap:10px;padding:10px 12px;background:#221c32;box-shadow:0 0 0 3px #120e1b;flex-shrink:0}
+.coach-step .num{display:grid;place-items:center;flex-shrink:0;width:30px;height:30px;font-size:22px;color:#1d1830;background:var(--butter);box-shadow:inset 0 -3px 0 #d6b45f}
+.coach-step.done .num{background:var(--mint);box-shadow:inset 0 -3px 0 #5fae8d}
+.cs-body{flex:1;min-width:0;display:grid;gap:7px}
+.cs-body h4{margin:0;font-weight:400;font-size:21px;color:var(--text)}
+.cs-body .muted.small{margin:0;font-size:17px;line-height:1.2}
+.cs-body .muted.small b{color:var(--butter)}
+.ai-apps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ai-apps button{padding:8px 10px}
+.feedback-box textarea{min-height:64px;max-height:120px}
+.skip-feedback{align-self:center;font-size:17px;color:var(--muted);text-decoration:underline;background:none}
+

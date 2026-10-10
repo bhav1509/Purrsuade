@@ -98,7 +98,11 @@ function prep(){const l=level();return l<=2?60:l<=4?45:30;}
 function sessions(){return state.history.filter(h=>!h.incomplete);}
 function averageOverall(){const a=sessions().map(h=>+h.scores.overall).filter(Boolean);return a.length?round1(a.reduce((x,y)=>x+y,0)/a.length):0;}
 function recentAvg(){const a=sessions().slice(0,5).map(h=>+h.scores.overall).filter(Boolean);return a.length? a.reduce((x,y)=>x+y,0)/a.length:0;}
-function difficulty(){let d=1+Math.floor(sessions().length/5); const a=recentAvg(); if(a>=8)d++; if(a && a<6)d--; return clamp(d,1,7);}
+// Hardest topic category unlocked: follows the speaker's level (Lv 1 -> Everyday + Story, each level adds one),
+// nudged up by strong recent scores and down by weak ones.
+function difficulty(){let d=level()+1;const a=recentAvg();if(a>=8)d++;if(a&&a<5.5)d--;return clamp(d,1,7);}
+// Which of the 60 base prompts a topic came from (topics = base prompt + a variation).
+const topicBase=t=>BASE_TOPICS.findIndex(([,b])=>t.startsWith(b));
 function nextDuration(){const a=sessions().slice(0,3).map(h=>+h.scores.overall).filter(Boolean);if(a.length<3)return state.duration;const avg=a.reduce((x,y)=>x+y,0)/a.length;if(avg>=7.5)return clamp(state.duration+.5,2,5);if(avg<5.5)return clamp(state.duration-.5,2,5);return state.duration;}
 function yesterday(){const d=new Date();d.setDate(d.getDate()-1);return ymd(d);}
 function catMood(){const c=state.cat,n=c.name;if(!c.alive)return ['Gone',`${n} is resting in the garden.`];const m=Math.min(c.hunger,c.thirst,c.cleanliness,c.happiness);if(healthOf(c)<15)return ['Sick',`${n} is very weak and needs care now.`];if(m<15)return ['Critical',`${n} urgently needs care.`];if(m<35)return ['Unhappy',`${n} needs some attention.`];if(m<60)return ['Okay',`${n} is doing okay, but could use some care.`];if(m<85)return ['Happy',`${n} is feeling content.`];return ['Thriving',`${n} is thriving!`];}
@@ -239,7 +243,7 @@ function panelView(){
 }
 
 // ---- Quest ----
-const QUEST_STEPS=['Topic','Speak','Coach'];
+const QUEST_STEPS=['Topic','Speak','Feedback'];
 // Wheel state while choosing a topic: {rot, spinning, from, to, start, pick, rerolled, landed}
 let wheel={rot:wheelRotFor(0,.1),spinning:false};let wheelFrame=null;
 function questPanel(){
@@ -253,9 +257,9 @@ function questPanel(){
   const st=Math.min(challenge.step||0,QUEST_STEPS.length-1);
   return `<div class="challenge"><div class="steps">${QUEST_STEPS.map((l,i)=>`<button data-step="${i}" class="${i===st?'active':''}${i<st?' done':''}"><b>${i+1}</b>${l}</button>`).join('')}</div>
   <div class="step-body">${[stepTopic,stepSpeak,stepCoach][Math.min(st,2)]()}</div>
-  <div class="step-foot">${st?`<button class="secondary" data-step="${st-1}">← Back</button>`:''}${st<2?`<button class="primary" data-step="${st+1}">Next →</button>`:'<button class="primary" id="complete">Complete quest ✨</button>'}</div></div>`;
+  <div class="step-foot">${st?`<button class="secondary" data-step="${st-1}">← Back</button>`:''}${st===0?`<button class="primary" id="go-speak">I’m ready · start speaking →</button>`:st===1?`<button class="primary" data-step="2" ${recActive()||rec.whisper?'disabled':''}>Get feedback →</button>`:'<button class="primary" id="complete">Complete quest ✨</button>'}</div></div>`;
 }
-function stepTopic(){const tier=WHEEL_TIERS[challenge.difficulty-1];return `<div class="topic-box" style="--tier:${tier[1]}"><span>${tier[0].toUpperCase()} · LEVEL ${challenge.difficulty}/7</span><h3>${challenge.topic}</h3><div class="chips"><b><i class="px-icon brain" aria-hidden="true"></i>${prep()}s prep</b><b><i class="px-icon mic light" aria-hidden="true"></i>${state.duration} min target</b></div></div>${!challenge.rerolled?'<button class="secondary" id="reroll">↻ Use free reroll</button>':''}<p class="muted">Take ${prep()} seconds to prepare, then speak for about ${state.duration} minutes. Transcribe it for the next step.</p>`;}
+function stepTopic(){const tier=WHEEL_TIERS[challenge.difficulty-1];return `<div class="topic-box" style="--tier:${tier[1]}"><span>${tier[0].toUpperCase()} · DIFFICULTY ${challenge.difficulty}/7</span><h3>${challenge.topic}</h3><div class="chips"><b><i class="px-icon brain" aria-hidden="true"></i>${prep()}s prep</b><b><i class="px-icon mic light" aria-hidden="true"></i>${state.duration} min target</b></div></div>${!challenge.rerolled?'<button class="secondary" id="reroll">↻ Use free reroll</button>':''}<p class="muted">Take ${prep()} seconds to prepare, then speak for about ${state.duration} minutes. Transcribe it for the next step.</p>`;}
 // Big countdown digits drawn as pixels (the font's "1" has a flag that reads like a stray line).
 const DIGITS=['.###.|#...#|#..##|#.#.#|##..#|#...#|.###.','..#..|.##..|..#..|..#..|..#..|..#..|.###.','.###.|#...#|....#|...#.|..#..|.#...|#####','####.|....#|....#|.###.|....#|....#|####.','...#.|..##.|.#.#.|#..#.|#####|...#.|...#.','#####|#....|####.|....#|....#|#...#|.###.','.###.|#....|#....|####.|#...#|#...#|.###.','#####|....#|...#.|..#..|.#...|.#...|.#...','.###.|#...#|#...#|.###.|#...#|#...#|.###.','.###.|#...#|#...#|.####|....#|....#|.###.'].map(d=>d.split('|'));
 DIGITS[1]=['..#..','..#..','..#..','..#..','..#..','..#..','..#..'];DIGITS[0]=['.###.','#...#','#...#','#...#','#...#','#...#','.###.'];
@@ -438,13 +442,34 @@ function parseScores(text){
   return out;
 }
 function scoreStatus(){const n=SCORE_KEYS.filter(k=>challenge.scores[k]).length;return n===7?'All 7 scores in ✓':n?`${n} of 7 · fill in the rest`:'Fills in when you paste the reply';}
-function stepCoach(){return `<div class="coach-send"><span class="eyebrow">1 · SEND TO YOUR AI</span>
-    <div class="speak-actions"><button class="primary" id="copy-prompt">Copy for AI</button>${navigator.share?'<button class="secondary" id="share-prompt">Share to app</button>':''}</div>
-    <p class="muted small">Paste it into ChatGPT, Claude, Gemini or any chat AI.</p></div>
-  <div class="paste-head"><span class="eyebrow">2 · PASTE THE REPLY</span>${navigator.clipboard?.readText?'<button class="mini" id="paste-reply">Paste</button>':''}</div>
-  <label class="grow"><textarea id="feedback" aria-label="AI reply" placeholder="Paste the AI’s reply here...">${esc(challenge.feedback)}</textarea></label>
-  <div class="paste-head"><span class="eyebrow">SCORES</span><em id="score-status">${scoreStatus()}</em></div>
-  <div class="score-grid compact">${SCORE_KEYS.map(s=>`<label class="score-input${s==='overall'?' overall':''}"><span>${LABEL[s]}</span><input data-score="${s}" type="number" inputmode="decimal" min="1" max="10" step="0.5" value="${challenge.scores[s]||''}"></label>`).join('')}</div>`;}
+// ---- Feedback: one tap sends the talk to the user's AI app; then copy its answer and paste it back ----
+// ChatGPT and Claude accept the message in the link (?q=), so it arrives already typed in; for the others we copy it.
+const AI_APPS=[['chatgpt','ChatGPT','https://chatgpt.com/?q='],['claude','Claude','https://claude.ai/new?q='],['gemini','Gemini','https://gemini.google.com/app'],['other','Other app','']];
+function stepCoach(){
+  const fav=state.coachApp,apps=fav?[...AI_APPS.filter(a=>a[0]===fav),...AI_APPS.filter(a=>a[0]!==fav)]:AI_APPS,got=!!challenge.feedback.trim();
+  return `<div class="coach-step${got?' done':''}"><b class="num">1</b><div class="cs-body"><h4>Send your talk to an AI helper</h4>
+      <p class="muted small">Tap your app. Your talk is copied and the app opens with it${fav&&fav!=='gemini'&&fav!=='other'?' already typed in':''}. Just press send.</p>
+      <div class="ai-apps">${apps.map(([k,l],i)=>`<button class="${i===0&&fav?'primary':'secondary'}" data-ai="${k}">${i===0&&fav?'★ ':''}${l}</button>`).join('')}</div></div></div>
+    <div class="coach-step${got?' done':''}"><b class="num">2</b><div class="cs-body"><h4>Copy the AI’s answer</h4>
+      <p class="muted small">When it has answered, tap the <b>copy</b> button under the answer (two small squares), or press and hold the answer and choose <b>Copy</b>. Then come back here.</p></div></div>
+    <div class="coach-step${got?' done':''}"><b class="num">3</b><div class="cs-body"><h4>${got?'Answer added ✓':'Paste the answer here'}</h4>
+      ${navigator.clipboard?.readText?`<button class="${got?'secondary':'primary'}" id="paste-reply">${got?'Paste a different answer':'Paste the answer'}</button>`:''}
+      <label class="grow feedback-box"><textarea id="feedback" aria-label="AI answer" placeholder="Or press and hold here and choose Paste">${esc(challenge.feedback)}</textarea></label></div></div>
+    <div class="paste-head"><span class="eyebrow">SCORES</span><em id="score-status">${scoreStatus()}</em></div>
+    <div class="score-grid compact">${SCORE_KEYS.map(s=>`<label class="score-input${s==='overall'?' overall':''}"><span>${LABEL[s]}</span><input data-score="${s}" type="number" inputmode="decimal" min="1" max="10" step="0.5" value="${challenge.scores[s]||''}"></label>`).join('')}</div>
+    ${got?'':'<button class="mini skip-feedback" id="skip-feedback">Skip feedback today and finish</button>'}`;}
+async function openAI(app){
+  if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}
+  state.coachApp=app;save();
+  const prompt=coachPrompt();
+  if(app==='other'){if(navigator.share){try{await navigator.share({text:prompt});}catch(e){if(e.name!=='AbortError')copyPrompt();}}else copyPrompt();render();return;}
+  // Copy first (works inside the tap), so the user can always paste if the app doesn't pick up the link.
+  let copied=true;try{await navigator.clipboard.writeText(prompt);}catch{copied=false;try{promptFallback(prompt,true);copied=true;}catch{}}
+  const [,label,base]=AI_APPS.find(a=>a[0]===app),prefill=base.includes('?q=')&&encodeURIComponent(prompt).length<7000;
+  window.open(prefill?base+encodeURIComponent(prompt):base,'_blank','noopener');
+  toast(prefill?`Opening ${label} · press send`:`Copied · in ${label}, press and hold the message box and tap Paste`);
+  render();
+}
 // The short takeaways from the "KEY POINTS:" section of the reply (shown in the journal).
 function parseKeyPoints(text=''){
   const m=text.match(/KEY POINTS:?(?:\*\*)?[^\S\n]*\n?([\s\S]*?)(?:\n\s*(?:\*\*)?SCORES:|$)/i);if(!m)return [];
@@ -482,7 +507,13 @@ function paintWheel(){
 }
 // Choose the topic first, then spin so the pointer lands on its category.
 function spin(rerolled){
-  const d=difficulty(),pool=TOPICS.filter(x=>x.d>=Math.max(1,d-1)&&x.d<=d),prev=challenge?.topic;
+  // Pick a category from the unlocked range (the newest one a little more often), then a topic in it
+  // whose base prompt hasn't come up in the last 20 sessions.
+  const top=difficulty(),lo=Math.max(1,top-2),tiers=[];for(let t=lo;t<=top;t++)for(let w=0;w<(t===top?2:1);w++)tiers.push(t);
+  const recent=new Set([challenge?.topic,...state.history.slice(0,20).map(h=>h.topic)].filter(Boolean).map(topicBase));
+  let tier=tiers[Math.floor(Math.random()*tiers.length)];
+  if(state.history[0]&&TOPICS.find(x=>x.t===state.history[0].topic)?.d===tier&&tiers.some(t=>t!==tier)&&Math.random()<.6)tier=tiers.filter(t=>t!==tier)[Math.floor(Math.random()*tiers.filter(t=>t!==tier).length)];
+  const inTier=TOPICS.filter(x=>x.d===tier),fresh=inTier.filter(x=>!recent.has(topicBase(x.t))),pool=fresh.length?fresh:inTier,prev=challenge?.topic;
   let p=pool[Math.floor(Math.random()*pool.length)];
   if(prev&&pool.length>1)while(p.t===prev)p=pool[Math.floor(Math.random()*pool.length)];
   challenge=null;
@@ -519,7 +550,7 @@ function journalPanel(){
   const cal=monthCalendar();
   const pages=Math.max(1,Math.ceil(all.length/histPer));histPage=clamp(histPage,0,pages-1);
   const rows=all.slice(histPage*histPer,(histPage+1)*histPer);
-  return `${cal}<div class="hist-list"><div class="hist-rows">${rows.map(h=>`<button class="hist-row" data-hist="${h.id}"><span><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><b>${esc(h.topic)}</b></span><span class="score${h.incomplete?' inc':''}">${h.incomplete?'—':h.scores.overall}</span></button>`).join('')}</div>
+  return `${cal}<div class="hist-list"><div class="hist-rows">${rows.map(h=>`<button class="hist-row" data-hist="${h.id}"><span><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><b>${esc(h.topic)}</b></span><span class="score${h.incomplete||!h.scores.overall?' inc':''}">${h.incomplete||!h.scores.overall?'—':h.scores.overall}</span></button>`).join('')}</div>
   <div class="pager"><button class="secondary" data-hist-page="-1" ${histPage?'':'disabled'}>←</button><span>${histPage+1} / ${pages}</span><button class="secondary" data-hist-page="1" ${histPage<pages-1?'':'disabled'}>→</button></div></div>`;
 }
 function histDetail(h){return `<div class="hist-detail"><div class="detail-head"><button class="mini back" data-hist-back>← All sessions</button><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><h3>${esc(h.topic)}</h3><div class="chips"><b>🎯 ${h.scores.overall||'—'}/10</b><b>⭐ +${h.earnedXP} XP</b><b>${COIN}+${h.earnedCoins}</b><b><i class="px-icon mic light" aria-hidden="true"></i>${h.spokeSec?mmss(h.spokeSec):h.duration+' min'}</b></div><div class="score-chips">${SKILLS.map(s=>`<span>${LABEL[s]} <b>${h.scores[s]||'—'}</b></span>`).join('')}</div></div>${(()=>{const kp=h.keyPoints?.length?h.keyPoints:parseKeyPoints(h.feedback);
@@ -549,7 +580,7 @@ function settingsPanel(){const c=state.cat;return `
   ${installCard()}
   ${location.hash==='#debug'?`<section class="p-card"><h3>Test: skip time</h3><div class="settings">${[6,24,72].map(h=>`<button class="secondary" data-skip="${h}">+${h<24?h+' h':h/24+' d'}</button>`).join('')}</div></section>`:''}
   <section class="p-card"><h3>Help &amp; feedback</h3><p class="muted small">Found a bug or have an idea? It really helps.</p><div class="settings"><button class="primary" id="send-feedback">Send feedback</button><button class="secondary" id="replay-tour">Show the tour again</button></div></section>
-  <section class="p-card"><h3>Privacy</h3><p class="muted small">Everything (your cat, sessions and recordings) stays on this device; there are no accounts. High-accuracy transcription runs on this device too. Quick transcription uses your browser’s speech service (Chrome sends audio to Google). Feedback only goes to an AI when you copy or share it yourself.</p></section>
+  <section class="p-card"><h3>Privacy</h3><p class="muted small">Everything (your cat, sessions and recordings) stays on this device; there are no accounts. High-accuracy transcription runs on this device too. Quick transcription uses your browser’s speech service (Chrome sends audio to Google). Feedback only goes to an AI when you send it yourself.</p></section>
   <section class="p-card"><h3>Backup</h3><p class="muted small">Progress lives on this device. Export a backup regularly.${state.lastBackup?` Last backup: ${longDate(ymd(new Date(state.lastBackup)))}.`:' No backup yet.'}</p><div class="settings"><button class="secondary" id="export">↓ Export</button><button class="secondary" id="import">↑ Import</button><button class="danger" id="reset">Reset</button></div></section>
   <p class="app-version">Purrsuade v${APP_VERSION}</p>
 `;}
@@ -601,15 +632,17 @@ function bindPanel(){
   qa('[data-hist-page]').forEach(b=>b.onclick=()=>{histPage+=+b.dataset.histPage;render();});
   q('[data-hist-back]')?.addEventListener('click',()=>{histSel=null;render();});
   q('#spin')?.addEventListener('click',()=>spin(false)); q('#reroll')?.addEventListener('click',()=>spin(true));
-  q('#transcript')?.addEventListener('input',e=>{challenge.transcript=e.target.value;saveQuest();}); q('#feedback')?.addEventListener('input',e=>setFeedback(e.target.value));
+  q('#transcript')?.addEventListener('input',e=>{challenge.transcript=e.target.value;saveQuest();}); q('#feedback')?.addEventListener('input',e=>setFeedback(e.target.value)); q('#feedback')?.addEventListener('paste',()=>setTimeout(render,50));
   q('#rec-start')?.addEventListener('click',startSpeaking);q('#rec-now')?.addEventListener('click',beginRecording);q('#rec-cancel')?.addEventListener('click',cancelSpeaking);
   q('#rec-stop')?.addEventListener('click',stopRecording);q('#rec-type')?.addEventListener('click',()=>{rec={phase:'done'};render();$('#transcript')?.focus();});
   q('#rec-again')?.addEventListener('click',()=>{if(challenge.transcript.trim()&&!confirm('Record again? This replaces the current transcript.'))return;resetRecorder();challenge.transcript='';challenge.spokeSec=0;startSpeaking();});
-  q('#share-prompt')?.addEventListener('click',sharePrompt);
-  q('#paste-reply')?.addEventListener('click',async()=>{try{const t=await navigator.clipboard.readText();if(!t.trim()){toast('The clipboard is empty.');return;}$('#feedback').value=t;setFeedback(t);toast(SCORE_KEYS.every(k=>challenge.scores[k])?'Reply pasted · scores filled in':'Reply pasted');}catch{toast('Paste was blocked. Long-press the box and paste instead.');}});
+  qa('[data-ai]').forEach(b=>b.onclick=()=>openAI(b.dataset.ai));
+  q('#skip-feedback')?.addEventListener('click',()=>{if(confirm('Finish without AI feedback? You still get XP and coins, just a little less.'))completeQuest(true);});
+  q('#go-speak')?.addEventListener('click',()=>{challenge.step=1;render();if(rec.phase==='idle'&&!challenge.transcript.trim())startSpeaking();});
+  q('#paste-reply')?.addEventListener('click',async()=>{try{const t=await navigator.clipboard.readText();if(!t.trim()){toast('Nothing copied yet. Copy the AI’s answer first.');return;}setFeedback(t);render();toast(SCORE_KEYS.every(k=>challenge.scores[k])?'Answer added · scores filled in':'Answer added');}catch{toast('Paste was blocked. Press and hold the box below and choose Paste.');$('#feedback')?.focus();}});
   qa('[data-score]').forEach(i=>i.oninput=e=>{challenge.scores[e.target.dataset.score]=+e.target.value;saveQuest();const st=$('#score-status');if(st)st.textContent=scoreStatus();});
   qa('[data-self]').forEach(i=>i.oninput=e=>{challenge.self[e.target.dataset.self]=+e.target.value;saveQuest();e.target.previousElementSibling.querySelector('b').textContent=e.target.value+'/10';});
-  q('#copy-prompt')?.addEventListener('click',copyPrompt);q('#complete')?.addEventListener('click',completeQuest);
+  q('#complete')?.addEventListener('click',()=>completeQuest(false));
   qa('[data-coat]').forEach(b=>b.onclick=()=>{state.cat.coat=b.dataset.coat;persist();});
   qa('[data-room]').forEach(b=>b.onclick=()=>{state.room=b.dataset.room;persist();});
   q('#install-app')?.addEventListener('click',async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice.catch(()=>{});installPrompt=null;render();});
@@ -627,9 +660,7 @@ function bindPanel(){
   q('#reset')?.addEventListener('click',()=>{if(confirm('Reset Purrsuade and your cat? This cannot be undone unless you exported a backup.')){localStorage.removeItem(STORE);localStorage.removeItem(QUEST_STORE);state=fresh();setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);panel=null;challenge=null;render();}});
 }
 async function copyPrompt(){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}const prompt=coachPrompt();try{await navigator.clipboard.writeText(prompt);toast('Copied · paste it into your AI');}catch{promptFallback(prompt);}}
-// On phones this opens the share sheet, so the prompt can go straight into the ChatGPT / Claude / Gemini app.
-async function sharePrompt(){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}try{await navigator.share({text:coachPrompt()});}catch(e){if(e.name!=='AbortError')copyPrompt();}}
-function promptFallback(t){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('Coach prompt copied.');}
+function promptFallback(t,quiet){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();if(!quiet)toast('Coach prompt copied.');}
 // Point at a missing field: show its step, focus it and pin a "!" note that clears after a few
 // seconds or as soon as the user clicks or types in it.
 function flagField(step,selector,msg){
@@ -641,7 +672,7 @@ function flagField(step,selector,msg){
   const clear=()=>{box.classList.remove('invalid');box.querySelector('.field-msg')?.remove();el.removeEventListener('pointerdown',clear);el.removeEventListener('input',clear);};
   el.addEventListener('pointerdown',clear);el.addEventListener('input',clear);setTimeout(clear,3500);
 }
-function completeQuest(){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const daily=state.lastDaily!==today();let xp=daily?100:35;xp+=25+10+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();toast(`Quest complete · +${xp} XP · +${coins} coins`);}
+function completeQuest(skipFeedback){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!skipFeedback&&!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const daily=state.lastDaily!==today();let xp=daily?100:35;xp+=(skipFeedback?10:25+10)+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;if(skipFeedback)done.noFeedback=true;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();toast(`Quest complete · +${xp} XP · +${coins} coins`);}
 function care(a){const c=state.cat;if(!c.alive){toast(`${c.name} cannot be cared for in this state.`);return;}const x=CARE_ACTIONS[a];if(!careGain(a)){toast(`${HUD.find(h=>h[1]===x.key)[0]} is already full.`);return;}if(state.coins<x.cost){toast('Not enough coins. Complete a speaking quest.');return;}state.coins-=x.cost;const before=c[x.key];c[x.key]=clamp(c[x.key]+x.gain,0,100);if(a==='food')c.happiness=clamp(c.happiness+5,0,100);if(a==='litter')c.happiness=clamp(c.happiness+4,0,100);if(healthOf(c)>=5)c.zeroSince=null;catReaction={type:a,started:performance.now()};persist();tourEvent('care');toast(x.msg(c.name));floatGain(`+${Math.round(c[x.key]-before)} ${HUD.find(h=>h[1]===x.key)[0]}`,a);}
 function exportData(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`purrsuade-backup-${today()}.json`;a.click();URL.revokeObjectURL(url);state.lastBackup=Date.now();save();toast('Backup exported.');}
 $('#import-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.history||!d.cat)throw new Error();state=hydrate({...fresh(),...d});setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);save();panel=null;challenge=null;render();toast('Backup restored.');}catch{toast('That backup file is not valid.');}};r.readAsText(f);e.target.value='';});
@@ -685,11 +716,13 @@ function tourGo(dir){
 }
 function placeTour(){
   const st=TOUR[tour.i],el=st.target?.(),r=el&&(el.getBoundingClientRect?el.getBoundingClientRect():el),{shade,card}=tour,W=innerWidth,H=innerHeight;
-  if(!r||!r.width){shade.style.cssText=`left:${W/2}px;top:${H/2}px;width:0;height:0`;card.style.left=`${Math.max(12,(W-card.offsetWidth)/2)}px`;card.style.top=`${Math.max(12,(H-card.offsetHeight)/2)}px`;return;}
+  if(!r||!r.width){shade.style.cssText=`left:${W/2}px;top:${H/2}px;width:0;height:0`;card.dataset.side='';card.style.left=`${Math.max(12,(W-card.offsetWidth)/2)}px`;card.style.top=`${Math.max(12,(H-card.offsetHeight)/2)}px`;return;}
   const p=6;shade.style.cssText=`left:${r.left-p}px;top:${r.top-p}px;width:${r.width+p*2}px;height:${r.height+p*2}px`;
-  const cw=card.offsetWidth,ch=card.offsetHeight,below=r.top+r.height/2<H/2;
-  card.style.left=`${Math.min(W-cw-12,Math.max(12,r.left+r.width/2-cw/2))}px`;
-  card.style.top=`${below?Math.min(H-ch-12,r.top+r.height+p+12):Math.max(12,r.top-p-12-ch)}px`;
+  const cw=card.offsetWidth,ch=card.offsetHeight,below=r.top+r.height/2<H/2,left=Math.min(W-cw-12,Math.max(12,r.left+r.width/2-cw/2));
+  card.style.left=`${left}px`;
+  card.style.top=`${below?Math.min(H-ch-12,r.top+r.height+p+20):Math.max(12,r.top-p-20-ch)}px`;
+  // Arrow on the card's edge pointing at the highlighted control.
+  card.dataset.side=below?'below':'above';card.style.setProperty('--ax',`${Math.min(cw-22,Math.max(22,r.left+r.width/2-left))}px`);
 }
 function tourEvent(name){if(tour&&TOUR[tour.i]?.wait===name)setTimeout(()=>tour&&tourGo(1),name==='quest'?0:700);}
 function endTour(finished){

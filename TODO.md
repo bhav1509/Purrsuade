@@ -11,9 +11,22 @@ Ideas for improving Purrsuade, roughly in priority order.
 - [x] **Built-in timers.** A prep countdown (60 / 45 / 30 s by level) and a speaking timer showing the 2–5 minute target, with the cat watching.
 - [x] **Record and auto-transcribe.** Use the browser's speech recognition so the transcript fills itself in; allow playing the recording back. Check Safari/iPhone support first.
 - [x] **Read scores from pasted feedback.** Pick out "Clarity: 7, Structure: 8…" from the pasted AI feedback and pre-fill the Scores step.
+- [x] **One-tap AI apps.** Feedback step opens ChatGPT / Claude with the talk already typed in (Gemini / other: copied).
 - [ ] **Bring your own API key.** Settings option: the app calls the user's LLM directly and fills feedback + scores (no server needed).
 - [ ] **Hosted coach (paid).** Small backend with accounts, payments and a daily limit; also gives cloud backup.
 - [ ] **Keep recordings across reloads.** Audio playback currently lasts only until the page reloads (store in IndexedDB).
+
+## v2: support for less confident speakers
+Older testers found it hard to even frame sentences, and the copy-to-AI step confusing. Ideas, kept out of v1 on purpose:
+- [ ] **Starter level below Everyday.** Very simple prompts ("Tell me about your breakfast today") with a 30-second target.
+- [ ] **Sentence starters on screen.** While speaking, show 3 tappable openers for the topic ("One thing I love is…", "For example…", "That's why…").
+- [ ] **Plan in three taps.** Before speaking, answer: What's your main point? One example? How will you finish? Show the answers as a cheat card while talking.
+- [ ] **Hear an example first.** Read aloud (text-to-speech) a short model answer, then the user tries their own version.
+- [ ] **Repeat-after-me warm-up.** Say 2–3 short sentences after the app to build confidence before the real topic.
+- [ ] **Gentler feedback mode.** Ask the AI for one encouraging point and one small tip only, in plain words.
+- [ ] **Built-in feedback (no copy-paste).** The bring-your-own-key / hosted coach from Quest 2.0 removes the hardest step for non-technical users.
+- [ ] **Bigger text option** and a simpler layout for older users.
+- [ ] **Helper mode.** A family member sets it up and can see progress, encourage, or rate the talk instead of an AI.
 
 ## Game depth
 - [ ] **Phase 2 progression.** Decor shop (Lv 2), earned room styles (Lv 3), second cat (Lv 4), room expansion (Lv 5), caretaker (Lv 6), third cat and special items (Lv 7), rare coats and seasonal decor (Lv 8+). Progress panel becomes an unlocks track.
