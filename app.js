@@ -114,7 +114,7 @@ rolloverQuest();
 // Check again at each local midnight, and whenever the app comes back (timers sleep on phones).
 function newDayCheck(){const r=rolloverQuest();if(r){wheel={rot:wheel.rot,spinning:false};render();toast(r==='saved'?'New day · your unfinished quest was saved to the journal.':'New day · time for a fresh quest.');}}
 (function scheduleMidnight(){const n=new Date(),next=new Date(n.getFullYear(),n.getMonth(),n.getDate()+1,0,0,2);setTimeout(()=>{newDayCheck();scheduleMidnight();},next-n);})();
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){newDayCheck();if(typeof rec!=='undefined'&&recActive())keepAwake(true);}});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){newDayCheck();if(panel==='quest'&&!challenge)paintWheel();if(typeof rec!=='undefined'&&recActive())keepAwake(true);}});
 function toast(msg){let el=$('#toast'); if(!el){el=document.createElement('div');el.id='toast';document.body.appendChild(el);} el.textContent=msg;el.className='show';clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.className='',2400);}
 function persist(){save();render();}
 
@@ -371,7 +371,7 @@ function stepSpeak(){
   if(rec.phase==='rec'||rec.phase==='stopping'){const s=recSeconds();return `<div class="speak-stage live">
     <div class="rec-head"><span class="rec-dot"></span>${rec.phase==='stopping'?'Finishing…':'Recording'}<span class="mic-meter" title="Microphone level"><i id="mic-level"></i></span><b id="rec-clock">${mmss(s)} / ${mmss(target)}</b></div>
     <div class="bar rec-bar${s>=target?' reached':''}" id="rec-bar"><i style="width:${Math.min(100,s/target*100)}%"></i></div>
-    <div class="live-text" id="live-text">${!liveText()&&useWhisper()?'<i>Keep talking. Your words are written out when you stop.</i>':SpeechRec&&!rec.noSpeech?`${esc(rec.final||'')} <i>${esc(rec.interim||'Listening…')}</i>`:'<i>Live transcript isn’t available in this browser. Your audio is still being recorded.</i>'}</div>
+    <div class="listening"><i class="px-icon mic light listen-mic" aria-hidden="true"></i><b>I’m listening, keep talking</b><span class="muted">Your words will appear here when you finish.</span></div>
     <button class="primary" id="rec-stop" ${rec.phase==='stopping'?'disabled':''}>Stop</button></div>`;}
   if(rec.phase==='done'||challenge.transcript.trim()){const w=rec.whisper;return `${rec.audio?`<audio controls src="${rec.audio}"></audio>`:''}
     ${challenge.spokeSec?`<div class="chips"><b><i class="px-icon mic light" aria-hidden="true"></i>You spoke for ${mmss(challenge.spokeSec)}</b>${rec.accurate?'<b class="ok">High-accuracy ✓</b>':''}</div>`:''}
@@ -492,7 +492,7 @@ function paintWheel(){
     if(!cv.isConnected)return;
     const now=performance.now();let anim='sit',animT=now/1000;
     if(wheel.spinning){
-      const p=Math.min(1,(now-wheel.start)/3200),e=1-(1-p)**4,speed=4*(1-p)**3;
+      const p=Math.min(1,(now-wheel.start)/(wheel.dur||3200)),e=1-(1-p)**4,speed=4*(1-p)**3;
       wheel.rot=wheel.from+(wheel.to-wheel.from)*e;
       anim=speed>1.2?'run':speed>.15?'walk':'idle';
       const lab=$('#wheel-label');if(lab){const t=WHEEL_TIERS[wheelTierAt(wheel.rot)];lab.textContent=t[0];lab.style.setProperty('--tier',t[1]);}
@@ -501,7 +501,7 @@ function paintWheel(){
     else if(wheel.landed){startChallenge(wheel.pick,wheel.rerolled);return;}
     drawCatWheel(cv,wheel.rot,state.cat.coat,anim,animT);
     if(wheel.spinning||wheel.landed)wheelFrame=requestAnimationFrame(frame);
-    else if(!reducedMotion())wheelFrame=requestAnimationFrame(frame);
+    else wheelFrame=requestAnimationFrame(frame);
   };
   frame();roomAssetsReady.then(()=>{if(!wheel.spinning&&!wheel.landed)drawCatWheel(cv,wheel.rot,state.cat.coat,'sit',0);},()=>{});
 }
@@ -517,12 +517,12 @@ function spin(rerolled){
   let p=pool[Math.floor(Math.random()*pool.length)];
   if(prev&&pool.length>1)while(p.t===prev)p=pool[Math.floor(Math.random()*pool.length)];
   challenge=null;
-  const base=wheelRotFor(p.d-1,(Math.random()-.5)*.6),turns=Math.PI*2*5,cur=wheel.rot;
+  // With "Reduce motion" on (common on phones) the wheel still turns, just once and gently.
+  const calm=reducedMotion(),base=wheelRotFor(p.d-1,(Math.random()-.5)*.6),turns=Math.PI*2*(calm?1:5),cur=wheel.rot,dur=calm?1400:3200;
   let to=base;while(to<cur+turns)to+=Math.PI*2;
-  wheel={rot:cur,from:cur,to,start:performance.now(),spinning:!reducedMotion(),landed:reducedMotion(),landedAt:-1e9,pick:p,rerolled};
-  if(reducedMotion())wheel.rot=to;
+  wheel={rot:cur,from:cur,to,dur,start:performance.now(),spinning:true,landed:false,landedAt:-1e9,pick:p,rerolled};
   // Safety net: reveal the topic even if animation frames stall (background tab, panel closed mid-spin).
-  const pending=wheel;setTimeout(()=>{if(wheel===pending&&!challenge){wheel.rot=to;startChallenge(p,rerolled);}},reducedMotion()?900:4300);
+  const pending=wheel;setTimeout(()=>{if(wheel===pending&&!challenge){wheel.rot=to;startChallenge(p,rerolled);}},dur+1100);
   render();
 }
 function startChallenge(p,rerolled){
@@ -672,7 +672,7 @@ function flagField(step,selector,msg){
   const clear=()=>{box.classList.remove('invalid');box.querySelector('.field-msg')?.remove();el.removeEventListener('pointerdown',clear);el.removeEventListener('input',clear);};
   el.addEventListener('pointerdown',clear);el.addEventListener('input',clear);setTimeout(clear,3500);
 }
-function completeQuest(skipFeedback){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!skipFeedback&&!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const daily=state.lastDaily!==today();let xp=daily?100:35;xp+=(skipFeedback?10:25+10)+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;if(skipFeedback)done.noFeedback=true;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();toast(`Quest complete · +${xp} XP · +${coins} coins`);}
+function completeQuest(skipFeedback){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!skipFeedback&&!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const lvBefore=level(),topBefore=difficulty(),daily=state.lastDaily!==today();let xp=daily?100:35;xp+=(skipFeedback?10:25+10)+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;if(skipFeedback)done.noFeedback=true;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();showResult(entry,lvBefore,topBefore);}
 function care(a){const c=state.cat;if(!c.alive){toast(`${c.name} cannot be cared for in this state.`);return;}const x=CARE_ACTIONS[a];if(!careGain(a)){toast(`${HUD.find(h=>h[1]===x.key)[0]} is already full.`);return;}if(state.coins<x.cost){toast('Not enough coins. Complete a speaking quest.');return;}state.coins-=x.cost;const before=c[x.key];c[x.key]=clamp(c[x.key]+x.gain,0,100);if(a==='food')c.happiness=clamp(c.happiness+5,0,100);if(a==='litter')c.happiness=clamp(c.happiness+4,0,100);if(healthOf(c)>=5)c.zeroSince=null;catReaction={type:a,started:performance.now()};persist();tourEvent('care');toast(x.msg(c.name));floatGain(`+${Math.round(c[x.key]-before)} ${HUD.find(h=>h[1]===x.key)[0]}`,a);}
 function exportData(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`purrsuade-backup-${today()}.json`;a.click();URL.revokeObjectURL(url);state.lastBackup=Date.now();save();toast('Backup exported.');}
 $('#import-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.history||!d.cat)throw new Error();state=hydrate({...fresh(),...d});setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);save();panel=null;challenge=null;render();toast('Backup restored.');}catch{toast('That backup file is not valid.');}};r.readAsText(f);e.target.value='';});
@@ -685,10 +685,12 @@ const TOUR=[
   {target:()=>{const cv=$('#room-canvas'),c=cv?._cat;if(!c)return null;const rc=cv.getBoundingClientRect(),k=rc.width/cv.width;return {left:rc.left+c.x*k,top:rc.top+c.y*k,width:c.w*k,height:c.h*k};},
     title:'Say hi',body:()=>`Tap ${esc(state.cat.name)} to pet them.`,wait:'pet'},
   {target:()=>$('.room-hud'),when:()=>!visible($('.needs-toggle')),title:'Needs',body:()=>`Food, water, litter and fun. They drop slowly over time, so check in each day.`},
-  {target:()=>$('.needs-toggle'),when:()=>visible($('.needs-toggle')),title:'Needs',body:()=>`Tap <b>Needs</b> to see ${esc(state.cat.name)}’s food, water, litter and fun.`,wait:'needs'},
+  {target:()=>$('.needs-toggle'),when:()=>visible($('.needs-toggle')),title:'Needs',body:()=>`Tap <b>Needs</b> to see ${esc(state.cat.name)}’s food, water, litter and fun.`,wait:'needs',
+    after:{target:()=>$('.room-hud'),body:()=>`These bars are ${esc(state.cat.name)}’s needs. They drop slowly over time, so check in every day.`}},
   {target:()=>$('.hearts'),title:'Health',body:()=>`Hearts show overall health. Keep the needs up and the hearts stay full.`},
   {target:()=>$('.coins'),title:'Coins',body:()=>`You earn coins by speaking, and spend them on food, toys and treats.`},
-  {target:()=>$('.care-menu'),title:'Look after them',body:()=>`Open <b>Care</b> and give ${esc(state.cat.name)} some water. It’s free!`,wait:'care'},
+  {target:()=>$('.care-menu'),title:'Look after them',body:()=>`Open <b>Care</b> and give ${esc(state.cat.name)} some water. It’s free!`,wait:'care',
+    after:{target:()=>$('.care-menu[open] .care-menu-list')||$('.care-menu'),body:()=>`Nice! Water and litter are free. Food, play and treats cost coins, which you earn by speaking.`}},
   {target:()=>$('.cam-arrange'),title:'Make it yours',body:()=>`Tap here any time to move the furniture around the room.`},
   {target:()=>$('.hud-menu'),title:'Menu',body:()=>`Your quests, progress, journal and settings live here.`},
   {target:()=>$('.speak-btn'),title:'Your first quest',body:()=>`Ready? Tap <b>Speak</b> to spin a topic and practise for a couple of minutes.`,wait:'quest'},
@@ -705,9 +707,14 @@ function tourGo(dir){
   let i=tour.i+dir;while(TOUR[i]?.when&&!TOUR[i].when())i+=dir;
   if(i>=TOUR.length){endTour(true);return;}
   if(statsOpen&&TOUR[tour.i]?.wait==='needs')setStatsOpen(false);
-  tour.i=i;const st=TOUR[i],n=TOUR.filter(x=>!x.when||x.when()).length,pos=TOUR.slice(0,i+1).filter(x=>!x.when||x.when()).length;
-  tour.card.className='tour-card'+(st.wait?' waiting':'')+(st.target?'':' center');
-  tour.card.innerHTML=`<h3>${st.title}</h3><p>${st.body()}</p><div class="tour-foot"><span class="tour-dots">${pos} / ${n}</span><button class="tour-skip" data-tour="skip">Skip tour</button>${st.wait?'<button class="tour-later" data-tour="next">Skip step</button>':`<button class="tour-next" data-tour="next">${st.next||'Next'}</button>`}</div>`;
+  if(TOUR[tour.i]?.wait==='care'){careMenuOpen=false;const m=$('.care-menu');if(m)m.open=false;}
+  tour.i=i;tour.done=false;drawTourCard();
+}
+// A waiting step shows "Skip step" until the user does the action; steps with an `after` then explain what opened.
+function drawTourCard(){
+  const st=TOUR[tour.i],n=TOUR.filter(x=>!x.when||x.when()).length,pos=TOUR.slice(0,tour.i+1).filter(x=>!x.when||x.when()).length,waiting=st.wait&&!tour.done;
+  tour.card.className='tour-card'+(waiting?' waiting':'')+(st.target?'':' center');
+  tour.card.innerHTML=`<h3>${st.title}${tour.done?' ✓':''}</h3><p>${tour.done&&st.after?st.after.body():st.body()}</p><div class="tour-foot"><span class="tour-dots">${pos} / ${n}</span><button class="tour-skip" data-tour="skip">Skip tour</button>${waiting?'<button class="tour-later" data-tour="next">Skip step</button>':`<button class="tour-next" data-tour="next">${st.next||'Next'}</button>`}</div>`;
   tour.card.querySelector('[data-tour="skip"]').onclick=()=>endTour(false);
   tour.card.querySelector('[data-tour="next"]').onclick=()=>{
     const nm=$('#tour-cat-name');if(nm&&nm.value.trim()){state.cat.name=nm.value.trim().slice(0,18);persist();}
@@ -715,7 +722,7 @@ function tourGo(dir){
   placeTour();
 }
 function placeTour(){
-  const st=TOUR[tour.i],el=st.target?.(),r=el&&(el.getBoundingClientRect?el.getBoundingClientRect():el),{shade,card}=tour,W=innerWidth,H=innerHeight;
+  const st=TOUR[tour.i],el=(tour.done&&st.after?.target?.())||st.target?.(),r=el&&(el.getBoundingClientRect?el.getBoundingClientRect():el),{shade,card}=tour,W=innerWidth,H=innerHeight;
   if(!r||!r.width){shade.style.cssText=`left:${W/2}px;top:${H/2}px;width:0;height:0`;card.dataset.side='';card.style.left=`${Math.max(12,(W-card.offsetWidth)/2)}px`;card.style.top=`${Math.max(12,(H-card.offsetHeight)/2)}px`;return;}
   const p=6;shade.style.cssText=`left:${r.left-p}px;top:${r.top-p}px;width:${r.width+p*2}px;height:${r.height+p*2}px`;
   const cw=card.offsetWidth,ch=card.offsetHeight,below=r.top+r.height/2<H/2,left=Math.min(W-cw-12,Math.max(12,r.left+r.width/2-cw/2));
@@ -724,7 +731,8 @@ function placeTour(){
   // Arrow on the card's edge pointing at the highlighted control.
   card.dataset.side=below?'below':'above';card.style.setProperty('--ax',`${Math.min(cw-22,Math.max(22,r.left+r.width/2-left))}px`);
 }
-function tourEvent(name){if(tour&&TOUR[tour.i]?.wait===name)setTimeout(()=>tour&&tourGo(1),name==='quest'?0:700);}
+function tourEvent(name){const st=tour&&TOUR[tour.i];if(!st||st.wait!==name||tour.done)return;
+  if(st.after){tour.done=true;setTimeout(()=>tour&&drawTourCard(),150);}else setTimeout(()=>tour&&tourGo(1),name==='quest'?0:700);}
 function endTour(finished){
   if(!tour)return;cancelAnimationFrame(tour.frame);tour.shade.remove();tour.card.remove();tour=null;
   state.tourDone=true;save();if(finished)toast(`Have fun with ${state.cat.name}!`);
@@ -740,6 +748,17 @@ function showModal(html,wire){
 function closeModal(){document.querySelector('.modal-shade')?.remove();}
 const longDate=d=>new Date(d+'T12:00:00').toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'});
 const daysBetween=(a,b)=>Math.max(1,dayDiff(a,b)+1);
+// After completing a quest: score, rewards, level progress (and level-ups / new topics), key points.
+function showResult(h,lvBefore,topBefore){
+  const lv=level(),up=lv>lvBefore,top=difficulty(),kp=(h.keyPoints?.length?h.keyPoints:parseKeyPoints(h.feedback)).slice(0,3),o=+h.scores.overall||0;
+  showModal(`<h3>Quest complete! ✨</h3>
+    ${o?`<div class="result-score"><b>${o}</b><span>/10 overall</span></div>`:'<p class="modal-sub">No feedback today, still a great practice.</p>'}
+    <div class="result-chips"><span>⭐ +${h.earnedXP} XP</span><span>${COIN}+${h.earnedCoins}</span>${h.isDaily?`<span>🔥 ${state.streak}-day streak</span>`:''}${h.spokeSec?`<span>🎙 ${mmss(h.spokeSec)}</span>`:''}</div>
+    ${up?`<p class="result-up">Level up! You’re now <b>Lv ${lv} · ${title()}</b>${top>topBefore?`<br>New topics unlocked: <b>${WHEEL_TIERS[top-1][0]}</b>`:''}</p>`:''}
+    <div class="result-level"><span>Lv ${lv} · ${title()}</span><span>${state.xp%500}/500 XP</span></div><div class="bar result-bar"><i style="width:${(state.xp%500)/5}%"></i></div>
+    ${kp.length?`<div class="result-kp"><b>Remember next time</b><ul>${kp.map(k=>`<li>${esc(k)}</li>`).join('')}</ul></div>`:''}
+    <div class="modal-foot"><button class="modal-ok" data-close>Back to ${esc(state.cat.name)}</button></div>`);
+}
 function showGrave(g){
   showModal(`<h3>${esc(g.name)}</h3><p class="modal-sub">${cap(g.coat.replace('_',' '))} cat</p>
     <p>${longDate(g.born)} – ${longDate(g.died)}<br>Lived ${daysBetween(g.born,g.died)} ${daysBetween(g.born,g.died)===1?'day':'days'} with you · ${g.sessions} ${g.sessions===1?'session':'sessions'} together</p>

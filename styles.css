@@ -509,3 +509,25 @@ label.grow .field-msg{top:-3px;right:0}
 .feedback-box textarea{min-height:64px;max-height:120px}
 .skip-feedback{align-self:center;font-size:17px;color:var(--muted);text-decoration:underline;background:none}
 
+/* While recording: no transcript, just a calm "listening" panel */
+.listening{flex:1;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;background:#18141f;box-shadow:inset 0 0 0 2px #2f2843}
+.listening b{font-weight:400;font-size:24px;color:var(--butter)}
+.listening .muted{font-size:18px;max-width:28ch}
+.px-icon.listen-mic{width:70px;height:80px;animation:listenPulse 1.6s ease-in-out infinite}
+@keyframes listenPulse{50%{transform:scale(1.12);filter:drop-shadow(0 0 10px rgba(255,227,154,.6))}}
+@media (prefers-reduced-motion: reduce){.px-icon.listen-mic{animation:none}}
+/* Quest result */
+.result-score{display:flex;align-items:baseline;justify-content:center;gap:6px;margin:6px 0 2px}
+.result-score b{font-weight:400;font-size:64px;line-height:1;color:var(--butter)}
+.result-score span{font-size:20px;color:var(--muted)}
+.result-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:8px}
+.result-chips span{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;font-size:18px;background:#342c4a}
+.modal .result-up{text-align:center;color:var(--mint)}
+.modal .result-up b{font-weight:400;color:var(--butter)}
+.result-level{display:flex;justify-content:space-between;margin-top:12px;font-size:17px;color:var(--muted)}
+.result-bar{height:10px;border-radius:0;margin-top:4px;background:#0000004d}
+.result-bar i{border-radius:0;background:var(--butter);-webkit-mask:repeating-linear-gradient(90deg,#000 0 6px,transparent 6px 8px);mask:repeating-linear-gradient(90deg,#000 0 6px,transparent 6px 8px)}
+.result-kp{margin-top:12px;padding:9px 11px;background:#18141f}
+.result-kp b{font-weight:400;font-size:18px;color:var(--lav)}
+.result-kp ul{margin:5px 0 0;padding-left:18px;display:grid;gap:4px;font-size:18px;line-height:1.2}
+
