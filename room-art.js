@@ -227,7 +227,7 @@ function fitCanvas(canvas){
   let fit=usePad?padded:full;const cam=camFor(canvas),zoom=cam?cam.zoom:1;
   // Tall, narrow stages (phones) leave the room tiny, so draw it larger and let the sides spill;
   // the camera can pan to the edges.
-  if(cam&&H/W>(r.h/r.w)*1.2)fit=Math.min(fit*1.3,(usePad?H-pt-pb:H)/r.h);
+  if(cam&&H/W>(r.h/r.w)*1.2)fit=Math.min(fit*1.65,(usePad?H-pt-pb:H)/r.h);
   const scale=zoom!==1?fit*zoom:fit>=1&&Math.floor(fit)/fit>.85?Math.floor(fit):fit;
   const top=usePad?pt:0,avail=usePad?H-pt-pb:H;
   let x=(W-r.w*scale)/2,y=top+(avail-r.h*scale)/2;
