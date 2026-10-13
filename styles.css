@@ -536,4 +536,5 @@ label.grow .field-msg{top:-3px;right:0}
 .dictate-box span b{font-weight:400;color:var(--mint)}
 .dictate-box textarea{flex:1;min-height:110px}
 .choice{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
-
+.about-row{display:flex;justify-content:space-between;align-items:baseline;font-family:'Jersey 10',ui-monospace,monospace;font-size:21px}
+.about-row b{font-weight:400;color:var(--butter)}

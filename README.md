@@ -47,6 +47,17 @@ keep a backup (and **Import** to restore or move devices).
 - Isometric pixel cat room with a garden: 9 coats, 6 room styles, time-of-day sky,
   tap-to-pet, needs (food, water, litter, play) and movable furniture
 
+## Versions
+Versions follow [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH). Each release to the live
+site gets a new version, shown in Settings → About and listed in [CHANGELOG.md](CHANGELOG.md).
+1.0.0 will be the public launch. To publish:
+
+```bash
+scripts/release.sh patch "Fix the recording crash"   # 0.1.0 -> 0.1.1  (bug fixes)
+scripts/release.sh minor "Add keyboard dictation"     # 0.1.1 -> 0.2.0  (new features)
+scripts/release.sh 1.0.0 "Public launch"              # set an exact version
+```
+
 ## Run it locally
 ```bash
 python3 -m http.server 8080

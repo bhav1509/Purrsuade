@@ -1,4 +1,6 @@
-const APP_VERSION='1.0';
+// Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
+const APP_VERSION='0.1.0';
+const APP_RELEASED='2026-10-13';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
 // Storage keys keep the original name so existing progress carries over after the rename.
@@ -621,7 +623,7 @@ function settingsPanel(){const c=state.cat;return `
   <section class="p-card"><h3>Help &amp; feedback</h3><p class="muted small">Found a bug or have an idea? It really helps.</p><div class="settings"><button class="primary" id="send-feedback">Send feedback</button><button class="secondary" id="replay-tour">Show the tour again</button></div></section>
   <section class="p-card"><h3>Privacy</h3><p class="muted small">Everything (your cat, sessions and recordings) stays on this device; there are no accounts. High-accuracy transcription runs on this device too. Quick transcription uses your browser’s speech service (Chrome sends audio to Google). Feedback only goes to an AI when you send it yourself.</p></section>
   <section class="p-card"><h3>Backup</h3><p class="muted small">Progress lives on this device. Export a backup regularly.${state.lastBackup?` Last backup: ${longDate(ymd(new Date(state.lastBackup)))}.`:' No backup yet.'}</p><div class="settings"><button class="secondary" id="export">↓ Export</button><button class="secondary" id="import">↑ Import</button><button class="danger" id="reset">Reset</button></div></section>
-  <p class="app-version">Purrsuade v${APP_VERSION}</p>
+  <section class="p-card about"><h3>About</h3><div class="about-row"><span>Purrsuade</span><b>Version ${APP_VERSION}</b></div><p class="muted small">Released ${longDate(APP_RELEASED)} · test version (v1.0.0 will be the public launch)</p></section>
 `;}
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}function cap(s){return s[0].toUpperCase()+s.slice(1);}
 
