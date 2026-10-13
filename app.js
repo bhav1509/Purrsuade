@@ -100,7 +100,7 @@ function averageOverall(){const a=sessions().map(h=>+h.scores.overall).filter(Bo
 function recentAvg(){const a=sessions().slice(0,5).map(h=>+h.scores.overall).filter(Boolean);return a.length? a.reduce((x,y)=>x+y,0)/a.length:0;}
 // Hardest topic category unlocked: follows the speaker's level (Lv 1 -> Everyday + Story, each level adds one),
 // nudged up by strong recent scores and down by weak ones.
-function difficulty(){let d=level()+1;const a=recentAvg();if(a>=8)d++;if(a&&a<5.5)d--;return clamp(d,1,7);}
+function difficulty(){let d=level()+1;const a=recentAvg();if(a>=8)d++;if(a&&a<5.5)d--;return clamp(d,2,7);} // never fewer than two categories
 // Which of the 60 base prompts a topic came from (topics = base prompt + a variation).
 const topicBase=t=>BASE_TOPICS.findIndex(([,b])=>t.startsWith(b));
 function nextDuration(){const a=sessions().slice(0,3).map(h=>+h.scores.overall).filter(Boolean);if(a.length<3)return state.duration;const avg=a.reduce((x,y)=>x+y,0)/a.length;if(avg>=7.5)return clamp(state.duration+.5,2,5);if(avg<5.5)return clamp(state.duration-.5,2,5);return state.duration;}
@@ -154,10 +154,8 @@ function paintPixels(){
   const room=$('#room-canvas');
   if(!room)return;
   measureRoomPads();
-  if(reducedMotion()){
-    const still=()=>room.isConnected&&drawRoom(room,0,state.cat,null,state.room);
-    still();roomAssetsReady.then(still,()=>{});return;
-  }
+  // The room stays animated even with "Reduce motion" on: the cat's slow walk isn't the kind of motion that setting
+  // guards against, and a frozen first frame left the cat asleep forever.
   const animate=time=>{
     if(!room.isConnected)return;
     // On phone a panel covers the whole room: stop drawing until it closes (setPanel restarts us).
@@ -253,7 +251,7 @@ function questPanel(){
     <canvas id="wheel-canvas" width="288" height="288" aria-hidden="true"></canvas>
     <p class="wheel-label" id="wheel-label" style="--tier:${tier[1]}">${wheel.spinning||wheel.landed?tier[0]:'Spin for a topic'}</p>
     <button class="primary" id="spin" ${wheel.spinning?'disabled':''}>${wheel.spinning?'Spinning…':daily?'Spin a practice topic':'Spin for today’s topic'}</button>
-    <p class="muted">Difficulty ${difficulty()}/7 · ${prep()} sec prep · ${state.duration} min target</p></div>`;}
+    <p class="muted">Topics: ${WHEEL_TIERS.slice(Math.max(0,difficulty()-3),difficulty()).map(t=>t[0]).join(' · ')}<br>${prep()} sec to plan · ${state.duration} min to speak</p></div>`;}
   const st=Math.min(challenge.step||0,QUEST_STEPS.length-1);
   return `<div class="challenge"><div class="steps">${QUEST_STEPS.map((l,i)=>`<button data-step="${i}" class="${i===st?'active':''}${i<st?' done':''}"><b>${i+1}</b>${l}</button>`).join('')}</div>
   <div class="step-body">${[stepTopic,stepSpeak,stepCoach][Math.min(st,2)]()}</div>
@@ -276,9 +274,11 @@ const transcriber=()=>state.transcriber||'whisper';
 // Phones get the smaller Whisper model (faster, ~40 MB); laptops the more accurate one (~79 MB).
 const whisperModel=()=>isPhone()?'Xenova/whisper-tiny.en':'Xenova/whisper-base.en';
 const useWhisper=()=>transcriber()==='whisper'&&!!window.Worker&&!!window.OfflineAudioContext;
+// Keyboard dictation: the user talks into the text box with the phone keyboard's microphone (no recording here).
+const dictating=()=>transcriber()==='dictate';
 // Whisper needs the audio, so it always records; then phones skip live recognition (it can't share the mic).
-const keepAudio=()=>useWhisper()||!SpeechRec||!isPhone();
-const liveText=()=>!!SpeechRec&&!(useWhisper()&&isPhone());
+const keepAudio=()=>!dictating()&&!useWhisper()&&(!SpeechRec||!isPhone());
+const liveText=()=>!!SpeechRec&&!dictating()&&!(useWhisper()&&isPhone());
 // Recorder state lives outside `challenge` (it holds live objects); phase: idle | prep | rec | stopping | done
 let rec={phase:'idle'},recTick=null;
 const mmss=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
@@ -300,10 +300,11 @@ async function keepAwake(on){try{if(on&&!wakeLock&&navigator.wakeLock){wakeLock=
 async function startSpeaking(){
   audioCtx();keepAwake(true);
   let stream=null;
-  // Ask for the mic up front, so the permission prompt doesn't eat into speaking time.
-  try{stream=await navigator.mediaDevices.getUserMedia({audio:true});}
+  // Ask for the mic up front, so the permission prompt doesn't eat into speaking time (not needed for dictation).
+  if(!dictating())try{stream=await navigator.mediaDevices.getUserMedia({audio:true});}
   catch{toast('The microphone is blocked. You can type or paste your transcript instead.');rec={phase:'done'};render();return;}
   rec={phase:'prep',stream,prepEnd:Date.now()+prep()*1000};
+  if(useWhisper()&&stream)whisperCall('load',{model:whisperModel()}).catch(()=>{});
   clearInterval(recTick);recTick=setInterval(tickRecorder,250);render();
 }
 function beginRecording(){
@@ -311,10 +312,63 @@ function beginRecording(){
   // One continuous recording (no time slices: iPhones produce unplayable pieces otherwise), in a format this browser can play back.
   if(keepAudio()&&window.MediaRecorder&&r.stream){try{r.chunks=[];const type=['audio/mp4','audio/webm;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported?.(t));
     r.mr=new MediaRecorder(r.stream,type?{mimeType:type}:undefined);r.mr.ondataavailable=e=>{if(e.data.size)r.chunks.push(e.data);};r.mr.start();}catch{r.mr=null;}}
-  if(!r.mr){r.stream?.getTracks().forEach(t=>t.stop());r.stream=null;}
+  if(!r.mr&&!useWhisper()){r.stream?.getTracks().forEach(t=>t.stop());r.stream=null;}
   // Level meter from the live mic, so it's obvious the app can hear you.
   if(r.stream){try{const ac=audioCtx();r.an=ac.createAnalyser();r.an.fftSize=512;r.src=ac.createMediaStreamSource(r.stream);r.src.connect(r.an);r.lvl=new Float32Array(r.an.fftSize);}catch{r.an=null;}}
-  rec=r;if(liveText())startRecognition(r);cue('start');render();
+  rec=r;if(useWhisper())startPcm(r);if(liveText())startRecognition(r);cue('start');render();
+}
+// ---- Whisper mode: capture raw 16 kHz audio and write it out in ~15 s pieces while the user talks ----
+// Nothing heavy is ever built: no audio file to encode or decode, and only one short piece is transcribed at a
+// time, so memory stays flat however long the talk is (a 2-minute talk used to crash iPhones at the end).
+// Each finished piece's text is saved straight away, so even a crash keeps almost everything.
+const PCM_RATE=16000;
+function startPcm(r){
+  const ac=audioCtx();if(!ac||!r.stream)return;
+  try{
+    const src=r.src||ac.createMediaStreamSource(r.stream),proc=ac.createScriptProcessor(4096,1,1),mute=ac.createGain();
+    r.src=src;mute.gain.value=0;src.connect(proc);proc.connect(mute);mute.connect(ac.destination);
+    const step=ac.sampleRate/PCM_RATE,q=challenge,model=whisperModel();let carry=0;
+    const P=r.pcm={all:[],piece:[],len:0,texts:[],sent:0,done:0,queue:Promise.resolve(),proc,mute,dl:{stage:'prep',pct:0}};
+    try{localStorage.setItem(WHISPER_FLAG,String(Date.now()));}catch{}
+    P.flush=()=>{
+      if(P.len<PCM_RATE*.4){P.piece=[];P.len=0;return;}
+      const audio=new Float32Array(P.len);let o=0;for(const c of P.piece){audio.set(c,o);o+=c.length;}
+      const idx=P.sent++;P.piece=[];P.len=0;
+      P.queue=P.queue.then(()=>whisperCall('run',{audio,model},trackDownload(P.dl,()=>{}))).then(out=>{
+        P.texts[idx]=out.text||'';P.done++;
+        if(challenge===q){q.transcript=P.texts.filter(Boolean).join(' ').replace(/\s+/g,' ').trim();saveQuest();}
+      }).catch(err=>{console.warn(err);P.failed=true;P.done++;});
+    };
+    proc.onaudioprocess=e=>{
+      if(r.phase!=='rec')return;
+      const inp=e.inputBuffer.getChannelData(0),out=new Float32Array(Math.ceil((inp.length-carry)/step));let n=0,pos=carry,sum=0;
+      for(;pos<inp.length;pos+=step){const v=inp[Math.floor(pos)];out[n++]=v;sum+=v*v;}
+      carry=pos-inp.length;const chunk=out.subarray(0,n);P.all.push(chunk);P.piece.push(chunk);P.len+=n;
+      // Cut at a pause after ~14 s (or at 20 s regardless), so words aren't split between pieces.
+      const quiet=Math.sqrt(sum/Math.max(1,n))<.012;
+      if((P.len>=PCM_RATE*14&&quiet)||P.len>=PCM_RATE*20)P.flush();
+    };
+  }catch(err){console.warn(err);r.pcm=null;}
+}
+function stopPcm(r){const P=r.pcm;if(!P)return;try{P.proc.disconnect();P.mute.disconnect();}catch{}P.flush();}
+// 16-bit mono WAV from the captured audio: small (~4 MB for 2 min) and plays everywhere.
+function pcmToWav(chunks){
+  const n=chunks.reduce((a,c)=>a+c.length,0),buf=new ArrayBuffer(44+n*2),v=new DataView(buf),w=(o,str)=>[...str].forEach((ch,i)=>v.setUint8(o+i,ch.charCodeAt(0)));
+  w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,PCM_RATE,true);v.setUint32(28,PCM_RATE*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
+  let o=44;for(const c of chunks)for(let i=0;i<c.length;i++,o+=2)v.setInt16(o,Math.max(-1,Math.min(1,c[i]))*0x7fff,true);
+  return new Blob([buf],{type:'audio/wav'});
+}
+// After stopping: wait for the last pieces, showing progress, then mark the transcript as high-accuracy.
+async function finishPcm(job,P){
+  const q=challenge,w=job.whisper={stage:'run',pct:P.sent?P.done/P.sent:1};render();
+  const tick=setInterval(()=>{w.stage=P.dl.stage==='download'?'download':'run';w.pct=P.dl.stage==='download'?P.dl.pct:(P.sent?P.done/P.sent:1);w.mb=P.dl.mb;
+    const m=$('#whisper-msg'),b=$('#whisper-bar');if(m)m.textContent=whisperMsg();if(b)b.style.width=`${Math.round(w.pct*100)}%`;},300);
+  await P.queue;clearInterval(tick);try{localStorage.removeItem(WHISPER_FLAG);}catch{}
+  if(challenge===q){if(P.texts.some(Boolean)){q.transcript=P.texts.filter(Boolean).join(' ').replace(/\s+/g,' ').trim();job.accurate=!P.failed;job.noText=false;saveQuest();}
+    else if(!q.transcript.trim()){job.noText=true;}}
+  if(P.failed)toast('Part of the recording couldn’t be written out. Check the transcript.');
+  job.whisper=null;if(rec===job&&challenge===q&&panel==='quest')render();
 }
 function startRecognition(r){
   const sr=new SpeechRec();sr.continuous=true;sr.interimResults=true;sr.lang=navigator.language||'en-US';
@@ -346,7 +400,7 @@ function tickRecorder(){
 // Stop both the recorder and recognition, wait (briefly) for their last results, then show the transcript.
 function stopRecording(){
   const r=rec;if(r.phase==='prep'){cancelSpeaking();return;}if(r.phase!=='rec'||!challenge)return;
-  r.phase='stopping';r.spoke=Math.round(recSeconds());cue('done');keepAwake(false);render();
+  r.phase='stopping';r.spoke=Math.round(recSeconds());cue('done');keepAwake(false);stopPcm(r);render();
   const waits=[];
   if(r.sr&&!r.noSpeech)waits.push(new Promise(res=>{r.srDone=res;try{r.sr.stop();}catch{res();}setTimeout(res,1500);}));
   if(r.mr&&r.mr.state!=='inactive')waits.push(new Promise(res=>{r.mr.onstop=res;r.mr.stop();}));
@@ -354,14 +408,14 @@ function stopRecording(){
     clearInterval(recTick);r.stream?.getTracks().forEach(t=>t.stop());try{r.src?.disconnect();}catch{}
     if(!challenge){resetRecorder();return;}
     const text=`${r.final} ${r.interim}`.trim();
-    if(text)challenge.transcript=text;
+    if(text)challenge.transcript=text;else if(dictating()){const ta=$('#transcript');if(ta)challenge.transcript=ta.value;}
     challenge.spokeSec=r.spoke;
-    const blob=r.chunks?.length?new Blob(r.chunks,{type:r.chunks[0].type||r.mr.mimeType||'audio/webm'}):null,audio=blob?URL.createObjectURL(blob):null;
-    rec={phase:'done',audio,noText:!text&&!(blob&&useWhisper())};saveQuest();render();
-    if(blob&&useWhisper())runWhisper(blob);
+    const blob=r.pcm?pcmToWav(r.pcm.all):r.chunks?.length?new Blob(r.chunks,{type:r.chunks[0].type||r.mr.mimeType||'audio/webm'}):null,audio=blob?URL.createObjectURL(blob):null;
+    rec={phase:'done',audio,noText:!challenge.transcript.trim()&&!r.pcm};saveQuest();render();
+    if(r.pcm)finishPcm(rec,r.pcm);
   });
 }
-function cancelSpeaking(){keepAwake(false);try{rec.src?.disconnect();}catch{}try{rec.sr&&(rec.sr.onend=null,rec.sr.abort());}catch{}try{rec.mr?.state!=='inactive'&&rec.mr?.stop();}catch{}rec.stream?.getTracks().forEach(t=>t.stop());resetRecorder();render();}
+function cancelSpeaking(){keepAwake(false);try{rec.pcm&&(rec.pcm.proc.disconnect(),rec.pcm.mute.disconnect());}catch{}try{localStorage.removeItem(WHISPER_FLAG);}catch{}try{rec.src?.disconnect();}catch{}try{rec.sr&&(rec.sr.onend=null,rec.sr.abort());}catch{}try{rec.mr?.state!=='inactive'&&rec.mr?.stop();}catch{}rec.stream?.getTracks().forEach(t=>t.stop());resetRecorder();render();}
 function stepSpeak(){
   const target=state.duration*60;
   if(rec.phase==='prep'){const left=Math.max(1,Math.ceil((rec.prepEnd-Date.now())/1000));return `<div class="speak-stage">
@@ -371,7 +425,8 @@ function stepSpeak(){
   if(rec.phase==='rec'||rec.phase==='stopping'){const s=recSeconds();return `<div class="speak-stage live">
     <div class="rec-head"><span class="rec-dot"></span>${rec.phase==='stopping'?'Finishing…':'Recording'}<span class="mic-meter" title="Microphone level"><i id="mic-level"></i></span><b id="rec-clock">${mmss(s)} / ${mmss(target)}</b></div>
     <div class="bar rec-bar${s>=target?' reached':''}" id="rec-bar"><i style="width:${Math.min(100,s/target*100)}%"></i></div>
-    <div class="listening"><i class="px-icon mic light listen-mic" aria-hidden="true"></i><b>I’m listening, keep talking</b><span class="muted">Your words will appear here when you finish.</span></div>
+    ${dictating()?`<label class="grow dictate-box"><span>Tap the box, then the <b>microphone</b> on your keyboard, and talk.</span><textarea id="transcript" placeholder="Your words appear here as you talk…">${esc(challenge.transcript)}</textarea></label>`
+      :'<div class="listening"><i class="px-icon mic light listen-mic" aria-hidden="true"></i><b>I’m listening, keep talking</b><span class="muted">Your words will appear here when you finish.</span></div>'}
     <button class="primary" id="rec-stop" ${rec.phase==='stopping'?'disabled':''}>Stop</button></div>`;}
   if(rec.phase==='done'||challenge.transcript.trim()){const w=rec.whisper;return `${rec.audio?`<audio controls src="${rec.audio}"></audio>`:''}
     ${challenge.spokeSec?`<div class="chips"><b><i class="px-icon mic light" aria-hidden="true"></i>You spoke for ${mmss(challenge.spokeSec)}</b>${rec.accurate?'<b class="ok">High-accuracy ✓</b>':''}</div>`:''}
@@ -381,12 +436,13 @@ function stepSpeak(){
     <button class="secondary" id="rec-again" ${w?'disabled':''}>↻ Record again</button>`;}
   return `<div class="speak-stage">
     <i class="px-icon mic light big" aria-hidden="true"></i><h3>Ready to speak?</h3>
-    <p class="muted">${prep()} seconds to plan, then talk for about ${state.duration} min. ${useWhisper()?'Your words are written out accurately on this device after you stop.':SpeechRec?'Your words are written down as you speak.':'This browser can’t write down speech, so you’ll add the transcript afterwards.'}</p>
+    <p class="muted">${prep()} seconds to plan, then talk for about ${state.duration} min. ${dictating()?'You’ll talk into a text box using the microphone on your keyboard.':useWhisper()?'Your words are written out accurately on this device as you talk.':SpeechRec?'Your words are written down as you speak.':'This browser can’t write down speech, so you’ll add the transcript afterwards.'}</p>
     <button class="primary" id="rec-start">Start</button><button class="mini" id="rec-type">I’ll type or paste it instead</button></div>`;
 }
 
 // ---- High-accuracy transcript: Whisper in a background worker, on this device ----
 let whisperWorker=null,whisperSeq=0;const whisperJobs={};
+const WHISPER_FLAG='purrsuade-whisper-running';
 function whisperCall(type,data={},onEvent){
   whisperWorker??=new Worker('whisper-worker.js',{type:'module'});
   whisperWorker.onmessage=e=>{const m=e.data,job=m.id!=null?whisperJobs[m.id]:null;
@@ -399,26 +455,9 @@ function whisperCall(type,data={},onEvent){
 function trackDownload(target,onUpdate){const files={};return m=>{
   if(m.type==='progress'&&m.total){files[m.file]=[m.loaded,m.total];const [l,t]=Object.values(files).reduce((a,[x,y])=>[a[0]+x,a[1]+y],[0,0]);target.stage='download';target.pct=t?l/t:0;target.mb=Math.round(t/1e6);}
   else if(m.type==='transcribing'){target.stage='run';target.pct=0;target.t0=Date.now();}
+  else if(m.type==='segment'){target.stage='run';target.pct=m.done/m.total;}
   onUpdate();};}
 function whisperMsg(){const w=rec.whisper;if(!w)return '';return w.stage==='download'?`Downloading the speech model · first time only · ${Math.round(w.pct*100)}%${w.mb?` of ${w.mb} MB`:''}`:w.stage==='run'?'Writing out your words accurately…':'Getting ready…';}
-// Whisper expects 16 kHz mono samples.
-async function audioTo16k(blob){
-  const ac=new AudioContext(),dec=await ac.decodeAudioData(await blob.arrayBuffer());ac.close();
-  const off=new OfflineAudioContext(1,Math.max(1,Math.ceil(dec.duration*16000)),16000),src=off.createBufferSource();
-  src.buffer=dec;src.connect(off.destination);src.start();return new Float32Array((await off.startRendering()).getChannelData(0));
-}
-async function runWhisper(blob){
-  const job=rec,w=job.whisper={stage:'prep',pct:0},q=challenge;render();
-  // While it runs, time-based progress stands in for real progress (Whisper doesn't report it).
-  const tick=setInterval(()=>{if(w.stage==='run'){w.pct=Math.min(.95,(Date.now()-w.t0)/1000/Math.max(8,(q.spokeSec||60)*.35));}paintWhisper();},400);
-  const paintWhisper=()=>{const m=$('#whisper-msg'),b=$('#whisper-bar');if(m)m.textContent=whisperMsg();if(b)b.style.width=`${Math.round(w.pct*100)}%`;};
-  try{
-    const audio=await audioTo16k(blob),out=await whisperCall('run',{audio,model:whisperModel()},trackDownload(w,paintWhisper));
-    if(challenge===q&&out.text){q.transcript=out.text;job.accurate=true;job.noText=false;saveQuest();}
-    else if(!out.text)toast('Whisper heard no words; kept the quick transcript.');
-  }catch(err){console.warn(err);toast('High-accuracy transcript failed; kept the quick one.');}
-  finally{clearInterval(tick);job.whisper=null;if(rec===job&&challenge===q&&panel==='quest')render();}
-}
 async function prepareWhisper(btn){
   const st={stage:'prep',pct:0},paint=()=>{btn.textContent=st.stage==='download'?`Downloading… ${Math.round(st.pct*100)}%`:'Loading…';};
   btn.disabled=true;paint();
@@ -575,7 +614,7 @@ function settingsPanel(){const c=state.cat;return `
     <div class="coat-grid">${CAT_COATS.map(k=>`<button data-coat="${k}" class="${(c.coat||'')===k?'active':''}" title="${cap(k.replace('_',' '))}" aria-label="${cap(k.replace('_',' '))}"><canvas width="64" height="64"></canvas></button>`).join('')}</div></section>
   <section class="p-card"><h3>Room style</h3><div class="room-grid">${ROOM_STYLES.map(k=>`<button data-room="${k}" class="${state.room===k?'active':''}"><canvas width="112" height="100"></canvas><span>${cap(k.replace('_',' '))}</span></button>`).join('')}</div></section>
   <section class="p-card"><h3>Transcription</h3>
-    <div class="choice">${[['browser','Quick','Live text from your browser while you talk. Can miss words, especially around pauses.'],['whisper','High accuracy',`Whisper writes it out on this device after you stop. Catches more words, and keeps the recording for replay. One-time ~${isPhone()?40:79} MB download.`]].map(([k,t,d])=>`<button data-transcriber="${k}" class="${transcriber()===k?'active':''}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>
+    <div class="choice">${[['dictate','Keyboard dictation','Talk into the text box with your keyboard’s microphone. Most reliable on iPhone; no replay.'],['browser','Quick','Live text from your browser while you talk. Can miss words, especially around pauses.'],['whisper','High accuracy',`Whisper writes it out on this device after you stop. Catches more words, and keeps the recording for replay. One-time ~${isPhone()?40:79} MB download.`]].map(([k,t,d])=>`<button data-transcriber="${k}" class="${transcriber()===k?'active':''}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>
     ${transcriber()==='whisper'?(state.whisperReady?'<p class="muted small">Speech model downloaded ✓ Works offline.</p>':'<button class="secondary" id="whisper-prep">Download the speech model now</button>'):''}</section>
   ${installCard()}
   ${location.hash==='#debug'?`<section class="p-card"><h3>Test: skip time</h3><div class="settings">${[6,24,72].map(h=>`<button class="secondary" data-skip="${h}">+${h<24?h+' h':h/24+' d'}</button>`).join('')}</div></section>`:''}
@@ -611,7 +650,7 @@ function bind(){
   const room=$('#room-canvas');
   if(room){
     let lastPet=0;
-    const redrawStill=()=>{if(reducedMotion())drawRoom(room,0,state.cat,null,state.room);};
+    const redrawStill=()=>{}; // the animation loop redraws every frame
     const pet=e=>{if(!state.cat.alive||!catHit(room,e.clientX,e.clientY))return;
       const now=performance.now();
       // A second tap on the cat soon after the first zooms in on it.
@@ -680,6 +719,9 @@ $('#import-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)
 if('serviceWorker' in navigator && location.protocol!=='file:')window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 // ---- First-run tour: spotlight each control; some steps wait for the user to try it ----
 const visible=el=>el&&el.offsetParent!==null&&getComputedStyle(el).visibility!=='hidden';
+// The Care button, plus its menu when open (the menu pops up outside the button's own box).
+function careArea(){const m=$('.care-menu');if(!m)return null;const rs=[m,m.open&&m.querySelector('.care-menu-list')].filter(Boolean).map(e=>e.getBoundingClientRect()).filter(r=>r.width);
+  if(!rs.length)return null;const l=Math.min(...rs.map(r=>r.left)),t=Math.min(...rs.map(r=>r.top)),R=Math.max(...rs.map(r=>r.right)),B=Math.max(...rs.map(r=>r.bottom));return {left:l,top:t,width:R-l,height:B-t};}
 const TOUR=[
   {title:'Meet your cat!',body:()=>`This little one lives in your room. Speak every day to earn coins and keep them happy.<label class="tour-name">Name your cat<input id="tour-cat-name" maxlength="18" value="${esc(state.cat.name)}"></label>`,next:'Let’s go'},
   {target:()=>{const cv=$('#room-canvas'),c=cv?._cat;if(!c)return null;const rc=cv.getBoundingClientRect(),k=rc.width/cv.width;return {left:rc.left+c.x*k,top:rc.top+c.y*k,width:c.w*k,height:c.h*k};},
@@ -689,15 +731,16 @@ const TOUR=[
     after:{target:()=>$('.room-hud'),body:()=>`These bars are ${esc(state.cat.name)}’s needs. They drop slowly over time, so check in every day.`}},
   {target:()=>$('.hearts'),title:'Health',body:()=>`Hearts show overall health. Keep the needs up and the hearts stay full.`},
   {target:()=>$('.coins'),title:'Coins',body:()=>`You earn coins by speaking, and spend them on food, toys and treats.`},
-  {target:()=>$('.care-menu'),title:'Look after them',body:()=>`Open <b>Care</b> and give ${esc(state.cat.name)} some water. It’s free!`,wait:'care',
-    after:{target:()=>$('.care-menu[open] .care-menu-list')||$('.care-menu'),body:()=>`Nice! Water and litter are free. Food, play and treats cost coins, which you earn by speaking.`}},
+  {target:careArea,title:'Look after them',body:()=>`Open <b>Care</b> and give ${esc(state.cat.name)} some water. It’s free!`,wait:'care',
+    after:{target:careArea,body:()=>`Nice! Water and litter are free. Food, play and treats cost coins, which you earn by speaking.`}},
   {target:()=>$('.cam-arrange'),title:'Make it yours',body:()=>`Tap here any time to move the furniture around the room.`},
   {target:()=>$('.hud-menu'),title:'Menu',body:()=>`Your quests, progress, journal and settings live here.`},
   {target:()=>$('.speak-btn'),title:'Your first quest',body:()=>`Ready? Tap <b>Speak</b> to spin a topic and practise for a couple of minutes.`,wait:'quest'},
 ];
 let tour=null;
 function startTour(){
-  if(panel)setPanel(null);if(arrange.on){arrange.on=false;render();}
+  // Start from a clean room: close the panel, any dialog, arrange mode and the Needs / Care dropdowns.
+  closeModal();if(panel)setPanel(null);arrange.on=false;careMenuOpen=false;if(statsOpen)setStatsOpen(false);render();
   document.querySelectorAll('.tour-shade,.tour-card').forEach(e=>e.remove());
   const shade=document.createElement('div'),card=document.createElement('div');shade.className='tour-shade';card.className='tour-card';card.setAttribute('role','dialog');
   document.body.append(shade,card);tour={i:-1,shade,card,frame:0};tourGo(1);
@@ -804,3 +847,6 @@ window.cqSkip=hours=>{state.cat.lastUpdated-=hours*3600000;if(state.cat.zeroSinc
 
 if(!state.tourDone&&!state.history.length)roomAssetsReady.then(()=>setTimeout(startTour,600),()=>{});
 else roomAssetsReady.then(()=>setTimeout(dangerCheck,700),()=>{});
+// Did writing out the words crash this browser last time? Then use keyboard dictation on this device.
+try{if(localStorage.getItem(WHISPER_FLAG)){localStorage.removeItem(WHISPER_FLAG);state.transcriber='dictate';save();
+  setTimeout(()=>showModal(`<h3>Sorry about that!</h3><p>Writing out your words used too much memory on this phone, and the app had to close. Anything already written out was kept in your quest.</p><p>From now on you’ll talk into the text box with your keyboard’s <b>microphone</b> instead: it’s Apple’s / Google’s own dictation and very reliable. You can change this in Settings → Transcription.</p><div class="modal-foot"><button class="modal-ok" data-close>Got it</button></div>`),900);}}catch{}

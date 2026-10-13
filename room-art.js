@@ -136,7 +136,7 @@ function poseAt(plan,time){
   return {x:lerp(0),y:lerp(1),z:lerp(2),anim:seg.anim,flip:seg.flip,animT:t-seg.t0,hearts:seg.hearts,hideYarn:seg.hideYarn,reacting:!plan.loop};
 }
 const IDLE_STEPS={
-  happy:[{at:'bed',anim:'sleep',dur:9},{at:'bed',anim:'idle',dur:1.5},{to:'rug'},{at:'rug',anim:'sit',dur:4},{at:'rug',anim:'idle',dur:1.5},{to:'window'},{at:'window',anim:'sit',dur:4},{to:'cushion'},{at:'cushion',anim:'idle',dur:2.5},{to:'bed'}],
+  happy:[{at:'bed',anim:'sleep',dur:5},{at:'bed',anim:'idle',dur:1.5},{to:'rug'},{at:'rug',anim:'sit',dur:4},{at:'rug',anim:'idle',dur:1.5},{to:'window'},{at:'window',anim:'sit',dur:4},{to:'cushion'},{at:'cushion',anim:'idle',dur:2.5},{to:'bed'}],
   tired:[{at:'bed',anim:'sleep',dur:10}],
   sick:[{at:'bed',anim:'sleep',dur:12}],
 };
@@ -165,7 +165,8 @@ function currentPose(time,cat,reaction){
     const seg=idle.segs.find(s=>s.spot===catPlan.endSpot&&s.anim!=='walk');
     idle.start=end-(seg?seg.t0:0)*1000;catPlan=idle;planMood=mood;
   }
-  if(!catPlan||(catPlan.loop&&planMood!==mood)){catPlan=buildPlan(time,SPOT.bed,IDLE_STEPS[mood],true);planMood=mood;}
+  // Join the routine at a random point, so opening the app doesn't always show the same nap.
+  if(!catPlan||(catPlan.loop&&planMood!==mood)){catPlan=buildPlan(time,SPOT.bed,IDLE_STEPS[mood],true);if(mood==='happy')catPlan.start-=Math.random()*catPlan.dur*1000;planMood=mood;}
   return poseAt(catPlan,time);
 }
 

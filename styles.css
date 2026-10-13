@@ -530,4 +530,10 @@ label.grow .field-msg{top:-3px;right:0}
 .result-kp{margin-top:12px;padding:9px 11px;background:#18141f}
 .result-kp b{font-weight:400;font-size:18px;color:var(--lav)}
 .result-kp ul{margin:5px 0 0;padding-left:18px;display:grid;gap:4px;font-size:18px;line-height:1.2}
+/* Keyboard dictation while recording */
+.dictate-box{flex:1;min-height:140px;display:flex;flex-direction:column;gap:6px}
+.dictate-box span{font-size:19px;color:var(--butter)}
+.dictate-box span b{font-weight:400;color:var(--mint)}
+.dictate-box textarea{flex:1;min-height:110px}
+.choice{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
 
