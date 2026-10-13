@@ -1,5 +1,5 @@
 // Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
-const APP_VERSION='0.1.0';
+const APP_VERSION='0.1.1';
 const APP_RELEASED='2026-10-13';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
@@ -116,7 +116,7 @@ rolloverQuest();
 // Check again at each local midnight, and whenever the app comes back (timers sleep on phones).
 function newDayCheck(){const r=rolloverQuest();if(r){wheel={rot:wheel.rot,spinning:false};render();toast(r==='saved'?'New day · your unfinished quest was saved to the journal.':'New day · time for a fresh quest.');}}
 (function scheduleMidnight(){const n=new Date(),next=new Date(n.getFullYear(),n.getMonth(),n.getDate()+1,0,0,2);setTimeout(()=>{newDayCheck();scheduleMidnight();},next-n);})();
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){newDayCheck();if(panel==='quest'&&!challenge)paintWheel();if(typeof rec!=='undefined'&&recActive())keepAwake(true);}});
+document.addEventListener('visibilitychange',()=>{markVisibility();if(!document.hidden){newDayCheck();if(panel==='quest'&&!challenge)paintWheel();if(typeof rec!=='undefined'&&recActive())keepAwake(true);}});
 function toast(msg){let el=$('#toast'); if(!el){el=document.createElement('div');el.id='toast';document.body.appendChild(el);} el.textContent=msg;el.className='show';clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.className='',2400);}
 function persist(){save();render();}
 
@@ -331,15 +331,17 @@ function startPcm(r){
     r.src=src;mute.gain.value=0;src.connect(proc);proc.connect(mute);mute.connect(ac.destination);
     const step=ac.sampleRate/PCM_RATE,q=challenge,model=whisperModel();let carry=0;
     const P=r.pcm={all:[],piece:[],len:0,texts:[],sent:0,done:0,queue:Promise.resolve(),proc,mute,dl:{stage:'prep',pct:0}};
-    try{localStorage.setItem(WHISPER_FLAG,String(Date.now()));}catch{}
+    markWhisper('recording');
     P.flush=()=>{
       if(P.len<PCM_RATE*.4){P.piece=[];P.len=0;return;}
       const audio=new Float32Array(P.len);let o=0;for(const c of P.piece){audio.set(c,o);o+=c.length;}
       const idx=P.sent++;P.piece=[];P.len=0;
-      P.queue=P.queue.then(()=>whisperCall('run',{audio,model},trackDownload(P.dl,()=>{}))).then(out=>{
+      P.queue=P.queue.then(()=>{markWhisper(P.dl.stage==='download'?'download':'writing piece '+(idx+1));
+        // A piece that hasn't come back in 90 s is skipped (and the worker restarted) rather than waited on forever.
+        return Promise.race([whisperCall('run',{audio,model},trackDownload(P.dl,()=>{})),new Promise((_,rej)=>setTimeout(()=>{try{whisperWorker?.terminate();}catch{}whisperWorker=null;rej(new Error('timed out'));},90000))]);}).then(out=>{
         P.texts[idx]=out.text||'';P.done++;
         if(challenge===q){q.transcript=P.texts.filter(Boolean).join(' ').replace(/\s+/g,' ').trim();saveQuest();}
-      }).catch(err=>{console.warn(err);P.failed=true;P.done++;});
+      }).catch(err=>{console.warn(err);noteWhisperIssue(`piece ${idx+1} failed: ${err.message}`);P.failed=true;P.done++;});
     };
     proc.onaudioprocess=e=>{
       if(r.phase!=='rec')return;
@@ -366,7 +368,7 @@ async function finishPcm(job,P){
   const q=challenge,w=job.whisper={stage:'run',pct:P.sent?P.done/P.sent:1};render();
   const tick=setInterval(()=>{w.stage=P.dl.stage==='download'?'download':'run';w.pct=P.dl.stage==='download'?P.dl.pct:(P.sent?P.done/P.sent:1);w.mb=P.dl.mb;
     const m=$('#whisper-msg'),b=$('#whisper-bar');if(m)m.textContent=whisperMsg();if(b)b.style.width=`${Math.round(w.pct*100)}%`;},300);
-  await P.queue;clearInterval(tick);try{localStorage.removeItem(WHISPER_FLAG);}catch{}
+  await P.queue;clearInterval(tick);markWhisper(null);if(!P.failed&&state.whisperCrashes){state.whisperCrashes=0;save();}
   if(challenge===q){if(P.texts.some(Boolean)){q.transcript=P.texts.filter(Boolean).join(' ').replace(/\s+/g,' ').trim();job.accurate=!P.failed;job.noText=false;saveQuest();}
     else if(!q.transcript.trim()){job.noText=true;}}
   if(P.failed)toast('Part of the recording couldn’t be written out. Check the transcript.');
@@ -417,7 +419,7 @@ function stopRecording(){
     if(r.pcm)finishPcm(rec,r.pcm);
   });
 }
-function cancelSpeaking(){keepAwake(false);try{rec.pcm&&(rec.pcm.proc.disconnect(),rec.pcm.mute.disconnect());}catch{}try{localStorage.removeItem(WHISPER_FLAG);}catch{}try{rec.src?.disconnect();}catch{}try{rec.sr&&(rec.sr.onend=null,rec.sr.abort());}catch{}try{rec.mr?.state!=='inactive'&&rec.mr?.stop();}catch{}rec.stream?.getTracks().forEach(t=>t.stop());resetRecorder();render();}
+function cancelSpeaking(){keepAwake(false);try{rec.pcm&&(rec.pcm.proc.disconnect(),rec.pcm.mute.disconnect());}catch{}markWhisper(null);try{rec.src?.disconnect();}catch{}try{rec.sr&&(rec.sr.onend=null,rec.sr.abort());}catch{}try{rec.mr?.state!=='inactive'&&rec.mr?.stop();}catch{}rec.stream?.getTracks().forEach(t=>t.stop());resetRecorder();render();}
 function stepSpeak(){
   const target=state.duration*60;
   if(rec.phase==='prep'){const left=Math.max(1,Math.ceil((rec.prepEnd-Date.now())/1000));return `<div class="speak-stage">
@@ -445,6 +447,14 @@ function stepSpeak(){
 // ---- High-accuracy transcript: Whisper in a background worker, on this device ----
 let whisperWorker=null,whisperSeq=0;const whisperJobs={};
 const WHISPER_FLAG='purrsuade-whisper-running';
+// Crash guard marker: {t, stage, visible}. "visible" turns false while the app is in the background, so a page
+// that iOS unloads there (very common when switching apps) isn't mistaken for a crash.
+function markWhisper(stage){try{if(stage)localStorage.setItem(WHISPER_FLAG,JSON.stringify({t:Date.now(),stage,visible:!document.hidden}));else localStorage.removeItem(WHISPER_FLAG);}catch{}}
+function readWhisperMark(){try{const v=localStorage.getItem(WHISPER_FLAG);if(!v)return null;try{return JSON.parse(v);}catch{return {t:+v,stage:'run',visible:true};}}catch{return null;}}
+function markVisibility(){const m=readWhisperMark();if(m){m.visible=!document.hidden;try{localStorage.setItem(WHISPER_FLAG,JSON.stringify(m));}catch{}}}
+addEventListener('pagehide',()=>{const m=readWhisperMark();if(m){m.visible=false;try{localStorage.setItem(WHISPER_FLAG,JSON.stringify(m));}catch{}}});
+// Last thing that went wrong while writing out words, included with Send feedback.
+function noteWhisperIssue(what){try{localStorage.setItem('purrsuade-last-issue',`${new Date().toISOString()} ${what}`);}catch{}}
 function whisperCall(type,data={},onEvent){
   whisperWorker??=new Worker('whisper-worker.js',{type:'module'});
   whisperWorker.onmessage=e=>{const m=e.data,job=m.id!=null?whisperJobs[m.id]:null;
@@ -689,7 +699,8 @@ function bindPanel(){
   q('#install-app')?.addEventListener('click',async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice.catch(()=>{});installPrompt=null;render();});
   q('#replay-tour')?.addEventListener('click',()=>startTour());
   q('#send-feedback')?.addEventListener('click',()=>{
-    const info=`\n\n---\nPurrsuade v${APP_VERSION} · ${isPhone()?'phone':'computer'} · ${navigator.userAgent}`;
+    let issue='';try{issue=localStorage.getItem('purrsuade-last-issue')||'';}catch{}
+    const info=`\n\n---\nPurrsuade v${APP_VERSION} · ${isPhone()?'phone':'computer'} · transcription: ${transcriber()}${issue?` · last issue: ${issue}`:''} · ${navigator.userAgent}`;
     const url=FEEDBACK_URL.startsWith('mailto:')?`${FEEDBACK_URL}?subject=${encodeURIComponent('Purrsuade feedback')}&body=${encodeURIComponent('What happened / what would you like?'+info)}`
       :FEEDBACK_URL.includes('github.com')?`${FEEDBACK_URL}?title=${encodeURIComponent('Feedback: ')}&body=${encodeURIComponent('What happened / what would you like?'+info)}`:FEEDBACK_URL;
     window.open(url,'_blank','noopener');});
@@ -850,5 +861,10 @@ window.cqSkip=hours=>{state.cat.lastUpdated-=hours*3600000;if(state.cat.zeroSinc
 if(!state.tourDone&&!state.history.length)roomAssetsReady.then(()=>setTimeout(startTour,600),()=>{});
 else roomAssetsReady.then(()=>setTimeout(dangerCheck,700),()=>{});
 // Did writing out the words crash this browser last time? Then use keyboard dictation on this device.
-try{if(localStorage.getItem(WHISPER_FLAG)){localStorage.removeItem(WHISPER_FLAG);state.transcriber='dictate';save();
-  setTimeout(()=>showModal(`<h3>Sorry about that!</h3><p>Writing out your words used too much memory on this phone, and the app had to close. Anything already written out was kept in your quest.</p><p>From now on you’ll talk into the text box with your keyboard’s <b>microphone</b> instead: it’s Apple’s / Google’s own dictation and very reliable. You can change this in Settings → Transcription.</p><div class="modal-foot"><button class="modal-ok" data-close>Got it</button></div>`),900);}}catch{}
+// Did writing out the words crash last time? Closed in the background = iOS tidying up, not a crash.
+// First real crash: a heads-up; second: switch this device to keyboard dictation.
+{const m=readWhisperMark();if(m){markWhisper(null);
+  if(m.visible){noteWhisperIssue(`app closed while ${m.stage}`);state.whisperCrashes=(state.whisperCrashes||0)+1;
+    const second=state.whisperCrashes>=2;if(second)state.transcriber='dictate';save();
+    setTimeout(()=>showModal(second?`<h3>Switched to dictation</h3><p>The app closed again while writing out your words. This phone seems short on memory for it.</p><p>From now on you’ll talk into the text box with your keyboard’s <b>microphone</b> (Apple’s / Google’s own dictation, very reliable). You can change this in Settings → Transcription.</p><div class="modal-foot"><button class="modal-ok" data-close>Got it</button></div>`
+      :`<h3>The app closed</h3><p>It closed while writing out your words, maybe from running low on memory. Anything already written out is kept in your quest.</p><p>If it happens again, the app will switch to keyboard dictation for you.</p><div class="modal-foot"><button class="modal-ok" data-close>OK</button></div>`),900);}}}
