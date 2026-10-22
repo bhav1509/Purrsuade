@@ -29,7 +29,7 @@ esac
 git rev-parse "v$next" >/dev/null 2>&1 && { echo "Tag v$next already exists" >&2; exit 1; }
 today=$(date +%Y-%m-%d)
 
-node --check app.js && node --check room-art.js
+node --check app.js && node --check cloud.js && node --check room-art.js
 
 # Bump the version, release date and cache name (BSD/macOS sed).
 sed -i '' "s/^const APP_VERSION='$cur';/const APP_VERSION='$next';/" app.js

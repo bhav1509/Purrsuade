@@ -4,6 +4,9 @@ Versions follow [Semantic Versioning](https://semver.org): MAJOR.MINOR.PATCH.
 PATCH = bug fixes, MINOR = new features, MAJOR = the 1.0.0 public launch (and later, big breaking changes).
 Every push to the live app gets a new version, shown in Settings → About. Publish with `scripts/release.sh`.
 
+## v0.2.0 · 2026-10-22
+- Sign in with Google or email, cloud backup and sync, instant AI feedback (Claude Haiku 4.5 or your own key), delete account, privacy policy
+
 ## v0.1.1 · 2026-10-13
 - Crash guard: ignore background closes, switch to dictation only after two real crashes, skip stuck pieces, add diagnostics to feedback
 

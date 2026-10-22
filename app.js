@@ -1,6 +1,6 @@
 // Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
-const APP_VERSION='0.1.1';
-const APP_RELEASED='2026-10-13';
+const APP_VERSION='0.2.0';
+const APP_RELEASED='2026-10-22';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
 // Storage keys keep the original name so existing progress carries over after the rename.
@@ -36,7 +36,7 @@ function hydrate(d){const savedBorn=d.cat?.born;d.cat={...fresh().cat,...(d.cat|
   const firstDay=d.history.map(h=>h.date).sort()[0];
   if(!savedBorn)d.cat.born=d.graves.length?d.graves[d.graves.length-1].died:(firstDay||today());
   repairGraves(d);d.layout=d.layout&&typeof d.layout==='object'?d.layout:{}; d.coins=Number.isFinite(d.coins)?d.coins:80; return decayCat(d);}
-function save(){localStorage.setItem(STORE,JSON.stringify(state));}
+function save(){localStorage.setItem(STORE,JSON.stringify(state));cloudChanged();}
 // The quest in progress is kept under its own key so typing can save it without touching the cat's decay clock.
 const QUEST_STORE=STORE+'-quest';
 function loadQuest(){try{const q=JSON.parse(localStorage.getItem(QUEST_STORE)||'null');return q&&q.topic?q:null;}catch{return null;}}
@@ -483,22 +483,41 @@ const SCORE_KEYS=[...SKILLS,'overall'];
 function coachPrompt(){
   const words=challenge.transcript.trim().split(/\s+/).filter(Boolean).length,sec=challenge.spokeSec||0;
   const timing=sec?`SPEAKING TIME: ${mmss(sec)} (target: about ${state.duration} min) · roughly ${Math.round(words/(sec/60))} words per minute`:`TARGET LENGTH: about ${state.duration} min (actual time not recorded)`;
-  return `You are my friendly but honest communication mentor. I am practicing speaking, not writing. The transcript below was captured by speech recognition, so ignore small transcription errors.\n\nScore each from 1–10: Clarity, Structure, Confidence, Vocabulary, Conciseness, Grammar, Overall.\n\nThen give:\n1. Three specific strengths\n2. Three specific improvements\n3. Timing and pace: did my length suit the target, and was my pace comfortable to listen to (around 130–160 words per minute is typical)?\n4. A stronger structure I could have used\n5. A short improved example answer\n6. One focus for my next speaking session\n\nDo not overpraise me. Be encouraging, concrete and concise.\n\nFinish your reply with these two sections, exactly in this format:\nKEY POINTS:\n- 3 to 5 bullet points, each under 15 words: the most important takeaways\nSCORES: clarity=X; structure=X; confidence=X; vocabulary=X; conciseness=X; grammar=X; overall=X\n\nTOPIC:\n${challenge.topic}\n\n${timing}\n\nTRANSCRIPT:\n${challenge.transcript}`;}
+  return `You are my friendly but honest communication mentor. I am practicing speaking, not writing. The transcript below was captured by speech recognition, so ignore small transcription errors.\n\nScore each from 1–10: Clarity, Structure, Confidence, Vocabulary, Conciseness, Grammar, Overall.\n\nThen give:\n1. Three specific strengths\n2. Three specific improvements\n3. Timing and pace: did my length suit the target, and was my pace comfortable to listen to (around 130–160 words per minute is typical)?\n4. A stronger structure I could have used\n5. A short improved example answer\n6. One focus for my next speaking session\n\nDo not overpraise me. Be encouraging, concrete and concise.\n\nFinish your reply with these two sections as plain text (no headings, bold or other formatting), exactly in this format:\nKEY POINTS:\n- 3 to 5 bullet points, each under 15 words: the most important takeaways\nSCORES: clarity=X; structure=X; confidence=X; vocabulary=X; conciseness=X; grammar=X; overall=X\n\nTOPIC:\n${challenge.topic}\n\n${timing}\n\nTRANSCRIPT:\n${challenge.transcript}`;}
 // Reads scores from the reply: the SCORES line if present, otherwise lines like "Clarity: 7", "Clarity 7/10" or "| Clarity | 7/10 |".
 function parseScores(text){
-  const out={},line=(text.match(/SCORES:([^\n]*)/i)||[])[1];
+  const out={},line=[...text.matchAll(/SCORES:[*\s]*?([^\n]*\d[^\n]*)/gi)].pop()?.[1];
   for(const k of SCORE_KEYS){for(const src of [line,text]){if(!src)continue;
     const m=src.match(new RegExp(`\\b${k}\\b[^0-9\\n]{0,12}?(\\d{1,2}(?:\\.\\d)?)(?!\\d)`,'i'));
     if(m&&+m[1]>=1&&+m[1]<=10){out[k]=+m[1];break;}}}
   return out;
 }
-function scoreStatus(){const n=SCORE_KEYS.filter(k=>challenge.scores[k]).length;return n===7?'All 7 scores in ✓':n?`${n} of 7 · fill in the rest`:'Fills in when you paste the reply';}
+function scoreStatus(){const n=SCORE_KEYS.filter(k=>challenge.scores[k]).length;return n===7?'All 7 scores in ✓':n?`${n} of 7 · fill in the rest`:'Fills in with the feedback';}
 // ---- Feedback: one tap sends the talk to the user's AI app; then copy its answer and paste it back ----
 // ChatGPT and Claude accept the message in the link (?q=), so it arrives already typed in; for the others we copy it.
 const AI_APPS=[['chatgpt','ChatGPT','https://chatgpt.com/?q='],['claude','Claude','https://claude.ai/new?q='],['gemini','Gemini','https://gemini.google.com/app'],['other','Other app','']];
+// Instant feedback (own API key or signed-in account) fills the answer in directly; the AI-app steps stay as the other way.
+let coachBusy=false;
+function instantCard(got){
+  const mode=instantMode();
+  if(!mode)return `<div class="instant-card"><div><h4>✨ Instant feedback</h4><p class="muted small">${cloudOn()?`Skip the copy and paste: <b>sign in</b> for ${coachLeft??'a few'} free AI feedbacks a day, or add your own Anthropic API key.`:'Skip the copy and paste: add your own Anthropic API key in Settings.'}</p></div>
+    <div class="instant-actions">${cloudOn()?`${CLOUD_CONFIG.google?'<button class="primary" data-sign-in="Google">Continue with Google</button>':''}<button class="${CLOUD_CONFIG.google?'secondary':'primary'}" data-sign-in="">Sign in with email</button>`:''}<button class="secondary" data-panel-tab="settings">Add an API key</button></div></div>`;
+  const left=mode==='account'&&coachLeft!=null?` · ${coachLeft} left today`:'';
+  return `<div class="instant-card${got?' done':''}"><div><h4>${got?'Feedback added ✓':'✨ Instant feedback'}</h4><p class="muted small">${coachBusy?`${esc(state.cat.name)} is reading your talk… about 10–30 seconds.`:`The AI reads your talk and fills in the feedback and scores${mode==='key'?' (your API key)':left}.`}</p></div>
+    <button class="${got?'secondary':'primary'}" id="instant-feedback" ${coachBusy||(mode==='account'&&coachLeft===0)?'disabled':''}>${coachBusy?'Getting feedback…':got?'Get new feedback':mode==='account'&&coachLeft===0?'None left today':'Get feedback'}</button></div>`;
+}
+async function getInstantFeedback(){
+  if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}
+  if(coachBusy)return;coachBusy=true;render();
+  try{const text=await instantFeedback();if(challenge){setFeedback(text);toast(SCORE_KEYS.every(k=>challenge.scores[k])?'Feedback added · scores filled in':'Feedback added');}}
+  catch(e){toast(instantError(e));manualOpen=true;}
+  finally{coachBusy=false;render();}
+}
+let manualOpen=false;
 function stepCoach(){
-  const fav=state.coachApp,apps=fav?[...AI_APPS.filter(a=>a[0]===fav),...AI_APPS.filter(a=>a[0]!==fav)]:AI_APPS,got=!!challenge.feedback.trim();
-  return `<div class="coach-step${got?' done':''}"><b class="num">1</b><div class="cs-body"><h4>Send your talk to an AI helper</h4>
+  const fav=state.coachApp,apps=fav?[...AI_APPS.filter(a=>a[0]===fav),...AI_APPS.filter(a=>a[0]!==fav)]:AI_APPS,got=!!challenge.feedback.trim(),instant=!!instantMode();
+  return `${instantCard(got)}
+    ${instant?`<details class="manual-coach"${manualOpen?' open':''}><summary>Or use your own AI app (ChatGPT, Claude, Gemini)</summary>`:''}<div class="coach-step${got?' done':''}"><b class="num">1</b><div class="cs-body"><h4>Send your talk to an AI helper</h4>
       <p class="muted small">Tap your app. Your talk is copied and the app opens with it${fav&&fav!=='gemini'&&fav!=='other'?' already typed in':''}. Just press send.</p>
       <div class="ai-apps">${apps.map(([k,l],i)=>`<button class="${i===0&&fav?'primary':'secondary'}" data-ai="${k}">${i===0&&fav?'★ ':''}${l}</button>`).join('')}</div></div></div>
     <div class="coach-step${got?' done':''}"><b class="num">2</b><div class="cs-body"><h4>Copy the AI’s answer</h4>
@@ -506,9 +525,10 @@ function stepCoach(){
     <div class="coach-step${got?' done':''}"><b class="num">3</b><div class="cs-body"><h4>${got?'Answer added ✓':'Paste the answer here'}</h4>
       ${navigator.clipboard?.readText?`<button class="${got?'secondary':'primary'}" id="paste-reply">${got?'Paste a different answer':'Paste the answer'}</button>`:''}
       <label class="grow feedback-box"><textarea id="feedback" aria-label="AI answer" placeholder="Or press and hold here and choose Paste">${esc(challenge.feedback)}</textarea></label></div></div>
+    ${instant?'</details>':''}
     <div class="paste-head"><span class="eyebrow">SCORES</span><em id="score-status">${scoreStatus()}</em></div>
     <div class="score-grid compact">${SCORE_KEYS.map(s=>`<label class="score-input${s==='overall'?' overall':''}"><span>${LABEL[s]}</span><input data-score="${s}" type="number" inputmode="decimal" min="1" max="10" step="0.5" value="${challenge.scores[s]||''}"></label>`).join('')}</div>
-    ${got?'':'<button class="mini skip-feedback" id="skip-feedback">Skip feedback today and finish</button>'}`;}
+    ${got||coachBusy?'':'<button class="mini skip-feedback" id="skip-feedback">Skip feedback today and finish</button>'}`;}
 async function openAI(app){
   if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}
   state.coachApp=app;save();
@@ -523,8 +543,8 @@ async function openAI(app){
 }
 // The short takeaways from the "KEY POINTS:" section of the reply (shown in the journal).
 function parseKeyPoints(text=''){
-  const m=text.match(/KEY POINTS:?(?:\*\*)?[^\S\n]*\n?([\s\S]*?)(?:\n\s*(?:\*\*)?SCORES:|$)/i);if(!m)return [];
-  return m[1].split('\n').map(l=>l.replace(/^\s*(?:[-•*·]|\d+[.)])\s*/,'').replace(/\*\*/g,'').trim()).filter(l=>/[a-z0-9]/i.test(l)&&!/^SCORES/i.test(l)).slice(0,6);
+  const m=text.match(/KEY POINTS:?[*\s]*([\s\S]*?)(?:\n[\s#*]*SCORES:|$)/i);if(!m)return [];
+  return m[1].split('\n').map(l=>l.replace(/^[\s#]*(?:[-•*·]|\d+[.)])?\s*/,'').replace(/\*+/g,'').trim()).filter(l=>/[a-z0-9]/i.test(l)&&!/^SCORES/i.test(l)).slice(0,6);
 }
 function setFeedback(text){
   challenge.feedback=text;challenge.keyPoints=parseKeyPoints(text);const found=parseScores(text);Object.assign(challenge.scores,found);saveQuest();
@@ -622,19 +642,31 @@ function fitHistory(){const box=$('.hist-rows');if(!box)return;const per=Math.ma
 
 // ---- Settings ----
 function settingsPanel(){const c=state.cat;return `
+  ${accountCard()}
   <section class="p-card"><h3>Your cat</h3><div class="name-row"><input id="cat-name" maxlength="18" value="${esc(c.name)}" placeholder="Cat name"><button class="secondary" id="save-cat-name">Save</button></div>
     <div class="coat-grid">${CAT_COATS.map(k=>`<button data-coat="${k}" class="${(c.coat||'')===k?'active':''}" title="${cap(k.replace('_',' '))}" aria-label="${cap(k.replace('_',' '))}"><canvas width="64" height="64"></canvas></button>`).join('')}</div></section>
   <section class="p-card"><h3>Room style</h3><div class="room-grid">${ROOM_STYLES.map(k=>`<button data-room="${k}" class="${state.room===k?'active':''}"><canvas width="112" height="100"></canvas><span>${cap(k.replace('_',' '))}</span></button>`).join('')}</div></section>
+  <section class="p-card"><h3>Instant feedback</h3><p class="muted small">Use your own <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> for unlimited instant feedback, billed to your Anthropic account (well under 1 US cent each). It is kept only on this device and sent only to Anthropic.</p>
+    ${aiKey()?`<div class="settings"><p class="muted small">Key saved: <b>sk-ant-…${esc(aiKey().slice(-4))}</b></p><button class="secondary" id="ai-key-remove">Remove key</button></div>`
+      :'<div class="name-row"><input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"><button class="secondary" id="ai-key-save">Save</button></div>'}</section>
   <section class="p-card"><h3>Transcription</h3>
     <div class="choice">${[['dictate','Keyboard dictation','Talk into the text box with your keyboard’s microphone. Most reliable on iPhone; no replay.'],['browser','Quick','Live text from your browser while you talk. Can miss words, especially around pauses.'],['whisper','High accuracy',`Whisper writes it out on this device after you stop. Catches more words, and keeps the recording for replay. One-time ~${isPhone()?40:79} MB download.`]].map(([k,t,d])=>`<button data-transcriber="${k}" class="${transcriber()===k?'active':''}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>
     ${transcriber()==='whisper'?(state.whisperReady?'<p class="muted small">Speech model downloaded ✓ Works offline.</p>':'<button class="secondary" id="whisper-prep">Download the speech model now</button>'):''}</section>
   ${installCard()}
   ${location.hash==='#debug'?`<section class="p-card"><h3>Test: skip time</h3><div class="settings">${[6,24,72].map(h=>`<button class="secondary" data-skip="${h}">+${h<24?h+' h':h/24+' d'}</button>`).join('')}</div></section>`:''}
   <section class="p-card"><h3>Help &amp; feedback</h3><p class="muted small">Found a bug or have an idea? It really helps.</p><div class="settings"><button class="primary" id="send-feedback">Send feedback</button><button class="secondary" id="replay-tour">Show the tour again</button></div></section>
-  <section class="p-card"><h3>Privacy</h3><p class="muted small">Everything (your cat, sessions and recordings) stays on this device; there are no accounts. High-accuracy transcription runs on this device too. Quick transcription uses your browser’s speech service (Chrome sends audio to Google). Feedback only goes to an AI when you send it yourself.</p></section>
-  <section class="p-card"><h3>Backup</h3><p class="muted small">Progress lives on this device. Export a backup regularly.${state.lastBackup?` Last backup: ${longDate(ymd(new Date(state.lastBackup)))}.`:' No backup yet.'}</p><div class="settings"><button class="secondary" id="export">↓ Export</button><button class="secondary" id="import">↑ Import</button><button class="danger" id="reset">Reset</button></div></section>
-  <section class="p-card about"><h3>About</h3><div class="about-row"><span>Purrsuade</span><b>Version ${APP_VERSION}</b></div><p class="muted small">Released ${longDate(APP_RELEASED)} · test version (v1.0.0 will be the public launch)</p></section>
+  <section class="p-card"><h3>Privacy</h3><p class="muted small">Without an account, everything stays on this device. If you sign in, your progress (cat, coins, journal with transcripts and feedback) is stored in your account on Amazon Web Services so you can restore it; recordings never leave this device. High-accuracy transcription runs on this device. Quick transcription uses your browser’s speech service (Chrome sends audio to Google). Your talk only goes to an AI when you ask for feedback: instant feedback sends it to Claude (through your account on AWS, or to Anthropic with your own key). <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p></section>
+  <section class="p-card"><h3>Backup</h3><p class="muted small">${signedIn()?'Your progress backs up to your account automatically. A file backup is extra safety.':'Progress lives on this device. Sign in or export a backup regularly.'}${state.lastBackup?` Last backup: ${longDate(ymd(new Date(state.lastBackup)))}.`:' No backup yet.'}</p><div class="settings"><button class="secondary" id="export">↓ Export</button><button class="secondary" id="import">↑ Import</button><button class="danger" id="reset">Reset</button></div></section>
+  <section class="p-card about"><h3>About</h3><div class="about-row"><span>Purrsuade</span><b>Version ${APP_VERSION}</b></div><p class="muted small">Released ${longDate(APP_RELEASED)}${APP_VERSION.startsWith('0.')?' · test version (v1.0.0 will be the public launch)':''}</p></section>
 `;}
+function accountCard(){
+  if(!cloudOn())return '';
+  if(!signedIn())return `<section class="p-card"><h3>Account</h3><p class="muted small">Sign in to keep your cat and journal safe if this browser is cleared, use them on all your devices, and get ${coachLeft??'a few'} free instant AI feedbacks a day. Free, and the app still works without it.</p>
+    <div class="settings">${CLOUD_CONFIG.google?'<button class="primary" data-sign-in="Google">Continue with Google</button>':''}<button class="${CLOUD_CONFIG.google?'secondary':'primary'}" data-sign-in="">Sign in with email</button></div></section>`;
+  const at=syncMeta().at,dirty=syncMeta().dirty;
+  return `<section class="p-card"><h3>Account</h3><p class="muted small">Signed in as <b>${esc(accountEmail()||'you')}</b>.<br>${dirty?'Changes waiting to sync.':at?`Synced ${new Date(at).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'})}.`:'Syncing…'}</p>
+    <div class="settings"><button class="secondary" id="sync-now">Sync now</button><button class="secondary" id="sign-out">Sign out</button><button class="mini delete-account" id="delete-account">Delete my account</button></div></section>`;
+}
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}function cap(s){return s[0].toUpperCase()+s.slice(1);}
 
 // ---- Install as an app ----
@@ -678,7 +710,7 @@ function bindPanel(){
   const p=$('.panel');if(!p)return;const q=s=>p.querySelector(s),qa=s=>p.querySelectorAll(s);
   qa('[data-panel-tab]').forEach(b=>b.onclick=()=>{panel=null;setPanel(b.dataset.panelTab);});
   q('[data-panel-close]')?.addEventListener('click',()=>setPanel(null));
-  qa('[data-step]').forEach(b=>b.onclick=()=>{if(recActive())stopRecording();challenge.step=+b.dataset.step;render();});
+  qa('[data-step]').forEach(b=>b.onclick=()=>{if(recActive())stopRecording();challenge.step=+b.dataset.step;render();if(challenge.step===2)refreshCoachLeft();});
   qa('[data-hist]').forEach(b=>b.onclick=()=>{histSel=+b.dataset.hist;render();});
   qa('[data-hist-page]').forEach(b=>b.onclick=()=>{histPage+=+b.dataset.histPage;render();});
   q('[data-hist-back]')?.addEventListener('click',()=>{histSel=null;render();});
@@ -688,6 +720,18 @@ function bindPanel(){
   q('#rec-stop')?.addEventListener('click',stopRecording);q('#rec-type')?.addEventListener('click',()=>{rec={phase:'done'};render();$('#transcript')?.focus();});
   q('#rec-again')?.addEventListener('click',()=>{if(challenge.transcript.trim()&&!confirm('Record again? This replaces the current transcript.'))return;resetRecorder();challenge.transcript='';challenge.spokeSec=0;startSpeaking();});
   qa('[data-ai]').forEach(b=>b.onclick=()=>openAI(b.dataset.ai));
+  q('#instant-feedback')?.addEventListener('click',getInstantFeedback);
+  q('.manual-coach')?.addEventListener('toggle',e=>{manualOpen=e.target.open;});
+  qa('[data-sign-in]').forEach(b=>b.onclick=()=>cloudSignIn(b.dataset.signIn));
+  q('#sign-out')?.addEventListener('click',()=>{if(confirm('Sign out? Your progress stays on this device and in your account.'))cloudSignOut();});
+  q('#delete-account')?.addEventListener('click',async e=>{
+    if(!confirm('Delete your account? This removes your sign-in and the progress saved in your account. Progress on this device stays (use Reset to clear it). This cannot be undone.'))return;
+    e.currentTarget.disabled=true;
+    try{await cloudDeleteAccount();toast('Account deleted. Your progress is still on this device.');render();}
+    catch{e.currentTarget.disabled=false;toast('Couldn’t delete the account right now. Please try again.');}});
+  q('#sync-now')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;await cloudPush();await cloudPull(true);toast(syncMeta().dirty?'Couldn’t reach your account. It will retry.':'Progress synced ✓');render();});
+  q('#ai-key-save')?.addEventListener('click',()=>{const k=$('#ai-key').value.trim();if(!/^sk-ant-/.test(k)){toast('That doesn’t look like an Anthropic API key (it starts with sk-ant-).');return;}setAiKey(k);render();toast('API key saved on this device.');});
+  q('#ai-key-remove')?.addEventListener('click',()=>{setAiKey('');render();toast('API key removed from this device.');});
   q('#skip-feedback')?.addEventListener('click',()=>{if(confirm('Finish without AI feedback? You still get XP and coins, just a little less.'))completeQuest(true);});
   q('#go-speak')?.addEventListener('click',()=>{challenge.step=1;render();if(rec.phase==='idle'&&!challenge.transcript.trim())startSpeaking();});
   q('#paste-reply')?.addEventListener('click',async()=>{try{const t=await navigator.clipboard.readText();if(!t.trim()){toast('Nothing copied yet. Copy the AI’s answer first.');return;}setFeedback(t);render();toast(SCORE_KEYS.every(k=>challenge.scores[k])?'Answer added · scores filled in':'Answer added');}catch{toast('Paste was blocked. Press and hold the box below and choose Paste.');$('#feedback')?.focus();}});
@@ -709,7 +753,7 @@ function bindPanel(){
   q('#whisper-prep')?.addEventListener('click',e=>prepareWhisper(e.currentTarget));
   q('#save-cat-name')?.addEventListener('click',()=>{const n=$('#cat-name').value.trim().slice(0,18);if(!n){toast('Give your cat a name first.');return;}state.cat.name=n;persist();toast(`${n} has a new name!`);});
   q('#export')?.addEventListener('click',exportData);q('#import')?.addEventListener('click',()=>$('#import-file').click());
-  q('#reset')?.addEventListener('click',()=>{if(confirm('Reset Purrsuade and your cat? This cannot be undone unless you exported a backup.')){localStorage.removeItem(STORE);localStorage.removeItem(QUEST_STORE);state=fresh();setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);panel=null;challenge=null;render();}});
+  q('#reset')?.addEventListener('click',()=>{if(confirm(`Reset Purrsuade and your cat?${signedIn()?' This also resets the progress in your account.':''} This cannot be undone unless you exported a backup.`)){localStorage.removeItem(STORE);localStorage.removeItem(QUEST_STORE);state=fresh();save();cloudSyncSoon();setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);panel=null;challenge=null;render();}});
 }
 async function copyPrompt(){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}const prompt=coachPrompt();try{await navigator.clipboard.writeText(prompt);toast('Copied · paste it into your AI');}catch{promptFallback(prompt);}}
 function promptFallback(t,quiet){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();if(!quiet)toast('Coach prompt copied.');}
@@ -724,10 +768,10 @@ function flagField(step,selector,msg){
   const clear=()=>{box.classList.remove('invalid');box.querySelector('.field-msg')?.remove();el.removeEventListener('pointerdown',clear);el.removeEventListener('input',clear);};
   el.addEventListener('pointerdown',clear);el.addEventListener('input',clear);setTimeout(clear,3500);
 }
-function completeQuest(skipFeedback){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!skipFeedback&&!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const lvBefore=level(),topBefore=difficulty(),daily=state.lastDaily!==today();let xp=daily?100:35;xp+=(skipFeedback?10:25+10)+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;if(skipFeedback)done.noFeedback=true;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();showResult(entry,lvBefore,topBefore);}
+function completeQuest(skipFeedback){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!skipFeedback&&!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const lvBefore=level(),topBefore=difficulty(),daily=state.lastDaily!==today();let xp=daily?100:35;xp+=(skipFeedback?10:25+10)+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;if(skipFeedback)done.noFeedback=true;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();cloudSyncSoon();showResult(entry,lvBefore,topBefore);}
 function care(a){const c=state.cat;if(!c.alive){toast(`${c.name} cannot be cared for in this state.`);return;}const x=CARE_ACTIONS[a];if(!careGain(a)){toast(`${HUD.find(h=>h[1]===x.key)[0]} is already full.`);return;}if(state.coins<x.cost){toast('Not enough coins. Complete a speaking quest.');return;}state.coins-=x.cost;const before=c[x.key];c[x.key]=clamp(c[x.key]+x.gain,0,100);if(a==='food')c.happiness=clamp(c.happiness+5,0,100);if(a==='litter')c.happiness=clamp(c.happiness+4,0,100);if(healthOf(c)>=5)c.zeroSince=null;catReaction={type:a,started:performance.now()};persist();tourEvent('care');toast(x.msg(c.name));floatGain(`+${Math.round(c[x.key]-before)} ${HUD.find(h=>h[1]===x.key)[0]}`,a);}
 function exportData(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`purrsuade-backup-${today()}.json`;a.click();URL.revokeObjectURL(url);state.lastBackup=Date.now();save();toast('Backup exported.');}
-$('#import-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.history||!d.cat)throw new Error();state=hydrate({...fresh(),...d});setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);save();panel=null;challenge=null;render();toast('Backup restored.');}catch{toast('That backup file is not valid.');}};r.readAsText(f);e.target.value='';});
+$('#import-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.history||!d.cat)throw new Error();state=hydrate({...fresh(),...d});setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);save();cloudSyncSoon();panel=null;challenge=null;render();toast('Backup restored.');}catch{toast('That backup file is not valid.');}};r.readAsText(f);e.target.value='';});
 
 if('serviceWorker' in navigator && location.protocol!=='file:')window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 // ---- First-run tour: spotlight each control; some steps wait for the user to try it ----
@@ -849,7 +893,7 @@ function dangerCheck(){
 }
 // Progress lives only in this browser, so nudge for a backup every two weeks once there's something to lose.
 function backupCheck(){
-  if(sessions().length<3)return;
+  if(sessions().length<3||signedIn())return;
   const last=Math.max(state.lastBackup||0,state.backupSnooze||0);if(Date.now()-last<14*DAY)return;
   showModal(`<h3>Back up your progress</h3><p>Your cat, coins and journal live only in this browser. A backup file lets you restore them if this browser’s data is ever cleared, or move to a new phone.</p>
     <div class="modal-foot"><button class="modal-later" data-close>Later</button><button class="modal-ok" data-backup-now>Back up now</button></div>`,
@@ -868,3 +912,4 @@ else roomAssetsReady.then(()=>setTimeout(dangerCheck,700),()=>{});
     const second=state.whisperCrashes>=2;if(second)state.transcriber='dictate';save();
     setTimeout(()=>showModal(second?`<h3>Switched to dictation</h3><p>The app closed again while writing out your words. This phone seems short on memory for it.</p><p>From now on you’ll talk into the text box with your keyboard’s <b>microphone</b> (Apple’s / Google’s own dictation, very reliable). You can change this in Settings → Transcription.</p><div class="modal-foot"><button class="modal-ok" data-close>Got it</button></div>`
       :`<h3>The app closed</h3><p>It closed while writing out your words, maybe from running low on memory. Anything already written out is kept in your quest.</p><p>If it happens again, the app will switch to keyboard dictation for you.</p><div class="modal-foot"><button class="modal-ok" data-close>OK</button></div>`),900);}}}
+cloudBoot();

@@ -508,6 +508,24 @@ label.grow .field-msg{top:-3px;right:0}
 .ai-apps button{padding:8px 10px}
 .feedback-box textarea{min-height:64px;max-height:120px}
 .skip-feedback{align-self:center;font-size:17px;color:var(--muted);text-decoration:underline;background:none}
+/* Instant feedback (own API key or account) above the AI-app steps, which fold away into "Or use your own AI app" */
+.instant-card{display:grid;gap:9px;padding:11px 12px;background:#2b2342;box-shadow:0 0 0 3px #120e1b,inset 0 0 0 2px var(--lav-deep);flex-shrink:0}
+.instant-card.done{box-shadow:0 0 0 3px #120e1b,inset 0 0 0 2px #5fae8d}
+.instant-card h4{margin:0;font-weight:400;font-size:22px;color:var(--butter)}
+.instant-card .muted.small{margin:2px 0 0;font-size:17px;line-height:1.2}
+.instant-card .muted.small b{color:var(--butter)}
+.instant-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.manual-coach{display:grid;gap:10px;flex-shrink:0}
+.manual-coach summary{padding:6px 2px;font-size:18px;color:var(--muted);text-decoration:underline;cursor:pointer;list-style:none}
+.manual-coach summary::-webkit-details-marker{display:none}
+.manual-coach[open] summary{margin-bottom:10px}
+.manual-coach .coach-step+.coach-step{margin-top:10px}
+/* Sync conflict: pick which progress to keep */
+.sync-pick{display:grid;gap:8px;margin-top:12px}
+.delete-account{justify-self:start;font-size:17px;color:var(--coral);text-decoration:underline;background:none}
+.sync-pick button{display:grid;gap:2px;text-align:left;padding:9px 10px}
+.sync-pick b{font-family:'Jersey 10',ui-monospace,monospace;font-weight:400;font-size:22px}
+.sync-pick small{font-family:'Jersey 10',ui-monospace,monospace;font-size:18px;color:var(--muted)}
 
 /* While recording: no transcript, just a calm "listening" panel */
 .listening{flex:1;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;background:#18141f;box-shadow:inset 0 0 0 2px #2f2843}

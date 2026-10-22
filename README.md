@@ -17,9 +17,10 @@ It's a web app you can install like a normal app (full screen, works offline).
 1. **Topic:** spin the wheel for today's topic (one free reroll).
 2. **Speak:** a short planning countdown, then talk while a timer tracks your target length.
    Your words are written out for you.
-3. **Feedback:** tap your AI app (ChatGPT, Claude, Gemini or another). Your talk opens there
-   ready to send. Copy the AI's answer, come back and tap **Paste the answer**: the scores and key
-   points fill in automatically. Complete the quest for XP and coins (or skip feedback for the day).
+3. **Feedback:** tap **Get feedback** for instant AI feedback: the scores and key points fill in by
+   themselves. It works when you're signed in (a few free a day) or have added your own Anthropic API key.
+   Or use your own AI app (ChatGPT, Claude, Gemini or another): your talk opens there ready to send; copy the
+   answer, come back and tap **Paste the answer**. Complete the quest for XP and coins (or skip feedback for the day).
 
 Unfinished quests are saved to the journal as incomplete at midnight.
 
@@ -31,18 +32,26 @@ Unfinished quests are saved to the journal as incomplete at midnight.
 
 Switch in Settings → Transcription.
 
-## Privacy
-Everything stays on your device: there are no accounts and no server. High-accuracy
-transcription runs locally. Quick transcription uses the browser's speech service (Chrome
-sends audio to Google). Feedback only goes to an AI when you send it yourself.
+## Account and backup
+Signing in is optional (Settings → Account: Google or email). When you're signed in, your progress backs up to
+your account automatically and syncs across your devices, so clearing the browser no longer loses your cat.
+Without an account, progress lives in that browser only: use Settings → **Export** now and then (and **Import**
+to restore or move devices).
 
-Progress lives in that browser on that device, so use Settings → **Export** now and then to
-keep a backup (and **Import** to restore or move devices).
+## Privacy
+Without an account everything stays on your device. With an account, your progress (cat, coins, journal with
+transcripts and feedback) is stored on Amazon Web Services; recordings never leave your device. High-accuracy
+transcription runs locally. Quick transcription uses the browser's speech service (Chrome sends audio to
+Google). Your talk only goes to an AI when you ask for feedback: instant feedback sends it to Claude (through
+AWS when signed in, or straight to Anthropic with your own key).
+
+The backend is in [`cloud/`](cloud/README.md) (Cognito, Lambda, S3, DynamoDB, Bedrock).
 
 ## Features
 - Daily quest + unlimited practice, adaptive difficulty (1–7), 500 topics
 - In-app recording with planning countdown, timer and live transcript
-- Score reading from pasted AI feedback
+- Instant AI feedback (Claude) with your account or your own API key, or one-tap ChatGPT / Claude / Gemini
+- Optional sign-in (Google or email) with automatic backup and sync across devices
 - XP, coins, levels, streaks; progress meters and a journal with a monthly calendar
 - Isometric pixel cat room with a garden: 9 coats, 6 room styles, time-of-day sky,
   tap-to-pet, needs (food, water, litter, play) and movable furniture

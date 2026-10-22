@@ -1,0 +1,222 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Purrsuade cloud: optional sign-in (Cognito), progress backup and sync (S3) and built-in AI feedback
+  (Claude in Amazon Bedrock). The app itself stays on GitHub Pages. See cloud/README.md to deploy.
+
+Parameters:
+  DomainPrefix:
+    Type: String
+    Description: Sign-in page address, https://<prefix>.auth.<region>.amazoncognito.com (must be unique in the region)
+    Default: purrsuade
+  AppOrigins:
+    Type: CommaDelimitedList
+    Description: Sites allowed to call the API (no trailing slash)
+    Default: https://bhav1509.github.io,http://localhost:8080
+  AppUrls:
+    Type: CommaDelimitedList
+    Description: Exact app addresses Cognito may send people back to after sign-in / sign-out
+    Default: https://bhav1509.github.io/Purrsuade/,http://localhost:8080/
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth client ID (leave empty to skip "Continue with Google")
+    Default: ''
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+  SesIdentityArn:
+    Type: String
+    Description: Verified SES email identity ARN. Set it to send sign-in emails from your own address and turn on passwordless email codes; empty = Cognito's default sender, email + password
+    Default: ''
+  SesFromAddress:
+    Type: String
+    Description: Sender shown on sign-in emails when SesIdentityArn is set, e.g. Purrsuade <hello@example.com>
+    Default: ''
+  CoachModel:
+    Type: String
+    Description: Bedrock model ID for instant feedback (an inference profile ID for older models such as Haiku 4.5)
+    Default: global.anthropic.claude-haiku-4-5-20251001-v1:0
+  CoachEffort:
+    Type: String
+    Description: Effort level (low / medium / high) for models that support it; empty for Claude Haiku 4.5, which doesn't
+    Default: ''
+  DailyCoachLimit:
+    Type: Number
+    Description: Built-in AI feedbacks per person per day
+    Default: 10
+  GlobalDailyCoachLimit:
+    Type: Number
+    Description: Built-in AI feedbacks for everyone together per day (a spending cap)
+    Default: 500
+
+Conditions:
+  HasGoogle: !Not [!Equals [!Ref GoogleClientId, '']]
+  HasSes: !Not [!Equals [!Ref SesIdentityArn, '']]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    MemorySize: 512
+
+Resources:
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: purrsuade-users
+      UserPoolTier: ESSENTIALS
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      AccountRecoverySetting:
+        RecoveryMechanisms: [{Name: verified_email, Priority: 1}]
+      Policies:
+        PasswordPolicy: {MinimumLength: 8, RequireLowercase: false, RequireUppercase: false, RequireNumbers: false, RequireSymbols: false}
+        SignInPolicy:
+          AllowedFirstAuthFactors: !If [HasSes, [PASSWORD, EMAIL_OTP], [PASSWORD]]
+      EmailConfiguration: !If
+        - HasSes
+        - {EmailSendingAccount: DEVELOPER, SourceArn: !Ref SesIdentityArn, From: !Ref SesFromAddress}
+        - {EmailSendingAccount: COGNITO_DEFAULT}
+      Schema:
+        - {Name: email, AttributeDataType: String, Required: true, Mutable: true}
+
+  GoogleProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: HasGoogle
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: openid email profile
+      AttributeMapping:
+        email: email
+        email_verified: email_verified
+
+  AppClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: purrsuade-web
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile]
+      CallbackURLs: !Ref AppUrls
+      LogoutURLs: !Ref AppUrls
+      SupportedIdentityProviders: !If [HasGoogle, [COGNITO, !Ref GoogleProvider], [COGNITO]]
+      ExplicitAuthFlows: [ALLOW_USER_AUTH, ALLOW_USER_SRP_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      # Stay signed in for a year on each device.
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 365
+      TokenValidityUnits: {AccessToken: hours, IdToken: hours, RefreshToken: days}
+
+  AuthDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      Domain: !Ref DomainPrefix
+      ManagedLoginVersion: 2
+
+  LoginBranding:
+    Type: AWS::Cognito::ManagedLoginBranding
+    DependsOn: AuthDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientId: !Ref AppClient
+      UseCognitoProvidedValues: true
+
+  # One JSON file per person (users/<id>/progress.json). Versioning keeps 30 days of old copies for rescue.
+  ProgressBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VersioningConfiguration: {Status: Enabled}
+      PublicAccessBlockConfiguration: {BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true}
+      LifecycleConfiguration:
+        Rules:
+          - {Id: old-copies, Status: Enabled, NoncurrentVersionExpiration: {NoncurrentDays: 30}}
+
+  # Daily feedback counters (pk = "<user id>#<date>" or "ALL#<date>"), removed automatically after a few days.
+  UsageTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{AttributeName: pk, AttributeType: S}]
+      KeySchema: [{AttributeName: pk, KeyType: HASH}]
+      TimeToLiveSpecification: {AttributeName: ttl, Enabled: true}
+
+  # A function URL rather than API Gateway: AI feedback can take longer than API Gateway's 30-second limit.
+  # Every request is checked against the Cognito sign-in token inside the function.
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: index.handler
+      Timeout: 120
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref UserPool
+          CLIENT_ID: !Ref AppClient
+          BUCKET: !Ref ProgressBucket
+          TABLE: !Ref UsageTable
+          COACH_MODEL: !Ref CoachModel
+          COACH_EFFORT: !Ref CoachEffort
+          DAILY_LIMIT: !Ref DailyCoachLimit
+          GLOBAL_DAILY_LIMIT: !Ref GlobalDailyCoachLimit
+      Policies:
+        - S3CrudPolicy: {BucketName: !Ref ProgressBucket}
+        - DynamoDBCrudPolicy: {TableName: !Ref UsageTable}
+        - Statement:
+            - Effect: Allow
+              Action: bedrock-mantle:CreateInference
+              Resource: '*'
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*anthropic.claude-*
+                - arn:aws:bedrock:*::foundation-model/anthropic.claude-*
+            # "Delete my account": remove every saved copy of the progress file, then the sign-in itself.
+            - Effect: Allow
+              Action: s3:ListBucketVersions
+              Resource: !GetAtt ProgressBucket.Arn
+            - Effect: Allow
+              Action: s3:DeleteObjectVersion
+              Resource: !Sub ${ProgressBucket.Arn}/users/*
+            - Effect: Allow
+              Action: cognito-idp:AdminDeleteUser
+              Resource: !GetAtt UserPool.Arn
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins: !Ref AppOrigins
+          AllowMethods: [GET, PUT, POST, DELETE]
+          AllowHeaders: [authorization, content-type]
+          MaxAge: 3600
+
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ApiFunction}
+      RetentionInDays: 30
+
+Outputs:
+  ApiUrl:
+    Description: CLOUD.api in cloud.js
+    Value: !GetAtt ApiFunctionUrl.FunctionUrl
+  AuthDomainUrl:
+    Description: CLOUD.authDomain in cloud.js
+    Value: !Sub https://${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com
+  ClientId:
+    Description: CLOUD.clientId in cloud.js
+    Value: !Ref AppClient
+  GoogleRedirectUri:
+    Description: Add this as an authorized redirect URI on the Google OAuth client
+    Value: !Sub https://${DomainPrefix}.auth.${AWS::Region}.amazoncognito.com/oauth2/idpresponse
