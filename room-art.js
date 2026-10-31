@@ -487,9 +487,11 @@ function fitCanvas(canvas){
   // On tall, narrow stages (phones) the whole room shows to start with; pinch to zoom in (or a little further out,
   // see minZoom), and the camera can pan to the edges.
   canvas._tall=!!cam&&H/W>(r.h/r.w)*1.2;
-  // A whole number of screen pixels per room pixel when that's at least 3 (sharp phone screens), so every line in
-  // the art is drawn equally thick; otherwise the old rule (whole numbers only when they cost little room).
-  const raw=fit*zoom,scale=raw>=3?(zoom===1?Math.floor(raw):Math.round(raw)):zoom===1&&raw>=1&&Math.floor(raw)/raw>.85?Math.floor(raw):raw;
+  // At rest, a whole number of screen pixels per room pixel when that's at least 3 (sharp phone screens), so every
+  // line in the art is drawn equally thick; otherwise whole numbers only when they cost little room. Zoomed, the
+  // scale follows the fingers smoothly, and settles on a whole number when they let go (see settleZoom).
+  const raw=fit*zoom,scale=zoom!==1?raw:raw>=3?Math.floor(raw):raw>=1&&Math.floor(raw)/raw>.85?Math.floor(raw):raw;
+  canvas._fit=fit;
   const top=usePad?pt:0,avail=usePad?H-pt-pb:H;
   let x=(W-r.w*scale)/2,y=top+(avail-r.h*scale)/2;
   if(cam){
@@ -504,7 +506,7 @@ function fitCanvas(canvas){
 // `grab(e)` may claim a press (arrange mode) by returning {move, end}; otherwise the press pans.
 function enableRoomCamera(canvas,{pinch,onTap,onChange,resetButton,zoomIn,zoomOut,grab}){
   const cam=camFor(canvas);if(!cam)return;
-  const pts=new Map();let start=null,moved=false,held=null;
+  const pts=new Map();let start=null,moved=false,held=null,pinched=false;
   let sync=()=>{if(resetButton)resetButton.hidden=camIsHome(cam);onChange?.();};
   const snap=()=>{const p=[...pts.values()],two=p.length>1;
     return {x:two?(p[0].x+p[1].x)/2:p[0].x,y:two?(p[0].y+p[1].y)/2:p[0].y,d:two?Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y):0,camX:cam.x,camY:cam.y,zoom:cam.zoom};};
@@ -524,18 +526,28 @@ function enableRoomCamera(canvas,{pinch,onTap,onChange,resetButton,zoomIn,zoomOu
       // Zoom about the pinch midpoint so the spot under the fingers stays put.
       const rc=canvas.getBoundingClientRect(),px=start.x-(rc.left+rc.width/2),py=start.y-(rc.top+rc.height/2);
       const z=Math.max(minZoom(canvas),Math.min(MAX_ZOOM,start.zoom*now.d/start.d)),k=z/start.zoom;
-      cam.zoom=z;cam.x=px-(px-start.camX)*k+(now.x-start.x);cam.y=py-(py-start.camY)*k+(now.y-start.y);moved=true;
+      cam.zoom=z;cam.x=px-(px-start.camX)*k+(now.x-start.x);cam.y=py-(py-start.camY)*k+(now.y-start.y);moved=true;pinched=true;
     }else{
       const dx=now.x-start.x,dy=now.y-start.y;if(Math.hypot(dx,dy)>6)moved=true;
       if(moved){cam.x=start.camX+dx;cam.y=start.camY+dy;}
     }
     sync();
   };
+  // After a pinch, ease the zoom to the nearest crisp size (a whole number of screen pixels per room pixel), about
+  // the middle of the view, over a few frames.
+  const settleZoom=()=>{
+    const fit=canvas._fit;if(!fit||fit*cam.zoom<3)return;
+    const to=Math.max(minZoom(canvas),Math.min(MAX_ZOOM,Math.round(fit*cam.zoom)/fit));if(Math.abs(to-cam.zoom)<1e-3)return;
+    const from=cam.zoom,t0=performance.now(),step=now=>{const k=Math.min(1,(now-t0)/140),z=from+(to-from)*(1-(1-k)**3),f=z/cam.zoom;
+      cam.zoom=z;cam.x*=f;cam.y*=f;sync();if(k<1&&!pts.size)requestAnimationFrame(step);};
+    requestAnimationFrame(step);
+  };
   const end=(e,tap)=>{
     if(!pts.has(e.pointerId))return;pts.delete(e.pointerId);
     if(held){held.end();held=null;}
     if(pts.size){start=snap();return;}
     canvas.classList.remove('dragging');if(tap&&!moved)onTap?.(e);
+    if(pinched){pinched=false;settleZoom();}
   };
   canvas.onpointerup=e=>end(e,true);canvas.onpointercancel=e=>end(e,false);
   if(resetButton)resetButton.onclick=()=>{cam.x=0;cam.y=0;cam.zoom=1;sync();};

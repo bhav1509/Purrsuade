@@ -4,6 +4,9 @@ Versions follow [Semantic Versioning](https://semver.org): MAJOR.MINOR.PATCH.
 PATCH = bug fixes, MINOR = new features, MAJOR = the 1.0.0 public launch (and later, big breaking changes).
 Every push to the live app gets a new version, shown in Settings → About. Publish with `scripts/release.sh`.
 
+## v0.3.3 · 2026-10-31
+- Instant feedback through sign-in only (own API key option removed); desk microphone icon everywhere; shorter Speak screen; steady listening mic; smooth pinch zoom on phones
+
 ## v0.3.2 · 2026-10-31
 - Phone: whole room in view at the start, pinch out a little further, even crisp lines; clearer arranging grid on wood and carpet floors; tidier starting room; the cat goes into and out of the cardboard box; chunkier menu and Speak icons; no gap under the island's side corners
 

@@ -14,7 +14,6 @@
 Run each on **iPhone Safari**, **iPhone installed app (Add to Home Screen)**, **Android Chrome** and **laptop Chrome**.
 - [ ] Fresh visit: tour, spin, speak (each transcription mode the device defaults to), feedback, complete quest.
 - [ ] Copy-paste feedback still works with ChatGPT and Claude.
-- [ ] Own API key: save, instant feedback, remove.
 - [ ] Sign in with Google and with email, coming back to the app (**check this inside the installed iPhone app**,
       where sign-in pages can behave differently), instant feedback, "N left today" goes down, limit message at 0.
 - [ ] Existing local progress uploads on first sign-in. Clear site data, sign in again: the cat and journal come back.

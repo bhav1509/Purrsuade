@@ -3,11 +3,12 @@
 Ideas for improving Purrsuade, roughly in priority order.
 
 ## v1.0.0 launch (Sunday 1 November 2026)
-v0.2.0 (sign-in, cloud backup and sync, instant AI feedback, delete account, privacy page) is live. Details and the
-device checklist are in [LAUNCH.md](LAUNCH.md).
+v0.3.2 is live: sign-in, cloud backup and sync, instant AI feedback, the shop, the reworked room and cat. Details
+and the device checklist are in [LAUNCH.md](LAUNCH.md).
 
-Testers need time to use the app before launch, so they get the link on day one. Analytics goes in on day two so
-their sessions are recorded from then on. Feature freeze moves to Saturday because the analytics work comes first.
+Status on Sat 31 Oct: Wed–Fri went to the shop, room and UI rounds (v0.3.0 → v0.3.2, and v0.3.3 waiting to be
+released), so the usage tracking and dashboard planned for Thu–Fri are not built yet. They now come straight after
+launch (see "Launch week"), so the first testers' sessions before that won't be recorded.
 
 **Wed 28 Oct: AWS settings, testers, shop decision**
 - [x] **Publish the Google sign-in first** (blocks testers). Google Cloud → Branding: homepage `https://bhav1509.github.io/Purrsuade/`, privacy policy `https://bhav1509.github.io/Purrsuade/privacy.html`, authorized domains `bhav1509.github.io` and `amazoncognito.com` → Audience → Publish app. Until then only listed test users can use Google sign-in.
@@ -18,20 +19,20 @@ their sessions are recorded from then on. Feature freeze moves to Saturday becau
 - [x] **Try email sign-up once.** Cognito's own sender allows ~50 emails a day; fine if most people use Google.
 - [x] **Calendar reminder for late March 2027:** the AWS free plan ends 20 April 2027 and the account is suspended unless upgraded.
 - [x] **Decide on the shop:** shipping it in v1.0.
-- [ ] **Test the shop on my own phone** (automated browser checks pass: buying, turning, shelves and racks, put away /
-      bring back, wall items, colours, room, coat, rename, reload, older saves). By hand: drag with a finger, the cat
-      on the sofa / armchair / cat tree, the shop aisles, and sync to a second device.
+- [x] **Test the shop on my own phone.** Done through the review rounds (v0.3.1–v0.3.3); the automated phone and
+      laptop suite (58 checks) covers buying, placing, put away, wall decor, colours, room, coat, rename and old saves.
+      Sync to a second device is still in the QA checklist below.
 - [x] **Release v0.3.0** with `scripts/release.sh minor "Shop: furniture, colours, room styles and coats"`.
 - [ ] **Message 3–5 LinkedIn testers** (including one less technical person) with the link; ask them to sign in.
 - [ ] Start device testing on my own phone: iPhone Safari, the installed iPhone app (sign-in is the biggest risk there).
 
-**Thu 29 Oct: build tracking and the feedback popups**
+**Thu 29 Oct: build tracking and the feedback popups** → moved to launch week (not started)
 Goal: see where signed-in beta testers drop off, and whether the idea is worth charging for.
 - [ ] **Usage events in the app.** `track(name, details)` queues events on the device (capped ~500) and sends them in
       batches while signed in (every 30 s, on hide, on sign-in); events from before sign-in go up on first sign-in.
       Events: app open, tour start/done/skip, spin/reroll, speak start/done/cancel, typed instead, instant feedback
       (ok/failed/limit), copy to AI app, feedback skipped, quest complete/abandoned, care, shop buy, cat died/adopted,
-      sign in/out, delete account, install, own key added, survey answer/dismiss. Never the transcript.
+      sign in/out, delete account, install, survey answer/dismiss. Never the transcript.
 - [ ] **"Share usage" switch** in Settings → Privacy (on by default).
 - [ ] **Feedback popups**, answered once per account (stored in the synced progress):
   - After the first finished quest: how useful (1–5), what would you pay a month (Nothing / $2 / $5 / $10+), what
@@ -44,21 +45,27 @@ Goal: see where signed-in beta testers drop off, and whether the idea is worth c
 - [ ] **Privacy policy:** what's recorded (actions, not what you say), why, how long, and the opt-out. Decide on an email contact.
 - [ ] Release v0.3.x; check on the laptop that events reach DynamoDB.
 
-**Fri 30 Oct: dashboard and device testing**
+**Fri 30 Oct: dashboard and device testing** (dashboard → launch week)
 - [ ] **Local dashboard** `node scripts/dashboard.mjs` → `http://localhost:8787`, rereads DynamoDB + Cognito users
       (`purrsuade` profile) on every refresh; nothing with emails is committed. Shows: headline numbers (users, active
       today / 7 days, quests, next-day and 7-day return, usefulness, would pay, % very disappointed), the funnel
       (opened → spun → spoke → finished speaking → feedback → quest done → came back → 3+ quests), a day 0–7 retention
       grid by start date, one row per user with where they stopped and a click-through timeline, survey answers and
-      comments, and feature use (instant vs copy-paste vs own key, transcription mode, shop and cat care).
+      comments, and feature use (instant vs copy-paste, transcription mode, shop and cat care).
 - [ ] Full QA checklist in LAUNCH.md on iPhone Safari, the installed iPhone app, Android Chrome and laptop: sync between
-      two devices, offline, sign out/in, delete account (events gone too), own API key, copy-paste with ChatGPT and Claude, both popups.
+      two devices, offline, sign out/in, delete account, copy-paste with ChatGPT and Claude. (Events and popups once built.)
 - [ ] Fix what comes up (patch releases); read the testers' first data in the dashboard.
-- [ ] **Clean up the UI and the topics.** Go through every panel on phone and laptop and list what looks rough
-      (spacing, wording, buttons, empty states); read through the topic list and remove weak, repeated or awkward
-      prompts. Fix it before Saturday's freeze, since the demo video shows both.
+- [x] **Clean up the UI.** Done over v0.3.1–v0.3.3: starter room, shop (two tabs, colour picker, wall decor),
+      selection rings, the cat walking round furniture and using the cat tree / condo / teepee / box, garden, icons,
+      phone zoom and crisp lines, a shorter Speak screen, own-API-key option removed.
+- [ ] **Clean up the topics.** Read through the topic list and remove weak, repeated or awkward prompts (the demo
+      video shows them).
 
 **Sat 31 Oct: feature freeze and launch content**
+- [ ] **Release v0.3.3** (ready, tested: 58/58 on phone and laptop): API key option removed, desk-mic icon everywhere,
+      shorter Speak screen, no glowing mic, smooth pinch zoom on phones. Then check it live on the phone.
+- [ ] **Hand check on my iPhone** (the things automated tests can't do): sign in inside the installed app, one full
+      quest with Whisper transcription and instant feedback, drag furniture with a finger.
 - [ ] Feature freeze: bug fixes only from here.
 - [ ] Demo video (60–90 s, vertical, captions; shot list in LAUNCH.md), recorded on the final build.
 - [ ] 3–4 screenshots for the post.
@@ -71,6 +78,15 @@ Goal: see where signed-in beta testers drop off, and whether the idea is worth c
 - [ ] Post on LinkedIn with the video.
 - [ ] Watch CloudWatch logs and GitHub issues for the first day.
 
+**Launch week (Mon 2 Nov →)**
+- [ ] **Usage tracking + feedback popups + `POST /events` + privacy policy update** (the Thu 29 Oct plan above), then
+      a patch release and a check that events reach DynamoDB.
+- [ ] **Local dashboard** (the Fri 30 Oct plan above).
+- [ ] Read tester comments; fix what comes up.
+- [ ] Later, if testers report transcription mistakes: cloud transcription (e.g. AWS Transcribe) as an option. Costs a
+      few cents a talk, and the audio leaves the device, so the privacy policy changes.
+- [ ] Optional: remove `examples/sample-backup-2026-10-05.json` (my own transcripts) from the git history.
+
 ## Fixes
 - [x] **Save a quest in progress.** The current quest (topic, transcript, scores) only lives in memory, so a reload or closing the app on a phone loses it.
 - [x] **Pause the room when it's hidden.** On phone, a full-screen panel covers the room but it keeps animating behind it and draining battery.
@@ -81,7 +97,7 @@ Goal: see where signed-in beta testers drop off, and whether the idea is worth c
 - [x] **Record and auto-transcribe.** Use the browser's speech recognition so the transcript fills itself in; allow playing the recording back. Check Safari/iPhone support first.
 - [x] **Read scores from pasted feedback.** Pick out "Clarity: 7, Structure: 8…" from the pasted AI feedback and pre-fill the Scores step.
 - [x] **One-tap AI apps.** Feedback step opens ChatGPT / Claude with the talk already typed in (Gemini / other: copied).
-- [x] **Bring your own API key.** Settings option: the app calls Claude directly and fills feedback + scores (no server needed).
+- [x] ~~**Bring your own API key.**~~ Built, then removed in v0.3.3: instant feedback is through sign-in only.
 - [x] **Hosted coach.** AWS backend (`cloud/`) with sign-in, a daily limit and cloud backup.
   - [ ] Payments / higher limits for regular users.
 - [ ] **Keep recordings across reloads.** Audio playback currently lasts only until the page reloads (store in IndexedDB).
@@ -94,7 +110,7 @@ Older testers found it hard to even frame sentences, and the copy-to-AI step con
 - [ ] **Hear an example first.** Read aloud (text-to-speech) a short model answer, then the user tries their own version.
 - [ ] **Repeat-after-me warm-up.** Say 2–3 short sentences after the app to build confidence before the real topic.
 - [ ] **Gentler feedback mode.** Ask the AI for one encouraging point and one small tip only, in plain words.
-- [x] **Built-in feedback (no copy-paste).** The bring-your-own-key / hosted coach from Quest 2.0 removes the hardest step for non-technical users.
+- [x] **Built-in feedback (no copy-paste).** The hosted coach from Quest 2.0 removes the hardest step for non-technical users.
 - [ ] **Bigger text option** and a simpler layout for older users.
 - [ ] **Helper mode.** A family member sets it up and can see progress, encourage, or rate the talk instead of an AI.
 
@@ -117,14 +133,14 @@ All features read from and add to one local **"Me" profile** (likes, stories, ta
   - Warm no: appreciate the ask, clear no, optional alternative.
   - Small talk: comment on something around you, then ask a question; FORD (family, occupation, recreation, dreams); pick up a detail they mentioned.
   - Jokes: callbacks, rule of three, exaggeration.
-- [ ] **Live Roleplay.** AI characters (chatty new coworker, friend who teases you, colleague pushing for a favour), back-and-forth by voice, debrief at the end. Loop: speech-to-text → Claude (Haiku 5.5, for low latency) → browser text-to-speech. Needs **Bring your own API key** (Quest 2.0) or the hosted coach.
+- [ ] **Live Roleplay.** AI characters (chatty new coworker, friend who teases you, colleague pushing for a favour), back-and-forth by voice, debrief at the end. Loop: speech-to-text → Claude (Haiku 5.5, for low latency) → browser text-to-speech. Needs the hosted coach (Quest 2.0).
 - [ ] **Real-World Missions.** A ladder of steps that get harder (say hi to the barista → ask a coworker about their weekend → tell a story from your bank → invite someone for coffee). Rate fear before (1–10) and after; showing the fear was bigger than reality is the main point. Big rewards, the cat celebrates.
 - [ ] **Trend Brief.** A daily card with 3 things people are talking about + one line of context each, then a 30-second "take a stance" quest that feeds the Opinion Builder. A daily GitHub Action pulls RSS or Wikipedia's "In the news" (optionally summarised by an LLM using a repo secret) and commits `trends.json` to GitHub Pages.
 - [ ] **Pre-Event Prep ("Party in 2 hours").** Pick the kind of event; get a cheat card with 2 stories, 2 trend takes and 3 openers that fit, then one quick drill. Build once the Story Bank, Opinion Builder and Trend Brief have content.
 - [ ] **Later, maybe: matching people.** Needs accounts, a backend, moderation and user safety. Start with Taste-Profile-based community suggestions as missions; consider peer practice partners at the same level after that.
 - [ ] **Product notes.** A clear "playful, not mean" line on tease-back drills; a short "practice, not therapy" note with a pointer to support for people whose social anxiety is severe.
 
-Order: Phase 1 Opinion Builder, Story Bank, Missions (no new infrastructure) → Phase 2 Reflex Drills → Phase 3 bring-your-own key + Live Roleplay → Phase 4 Trend Brief, Pre-Event Prep. Split `app.js` into modules (Foundations) before adding these modes.
+Order: Phase 1 Opinion Builder, Story Bank, Missions (no new infrastructure) → Phase 2 Reflex Drills → Phase 3 Live Roleplay → Phase 4 Trend Brief, Pre-Event Prep. Split `app.js` into modules (Foundations) before adding these modes.
 
 ## Game depth
 - [ ] **Phase 2 progression.** Decor shop (Lv 2), earned room styles (Lv 3), second cat (Lv 4), room expansion (Lv 5), caretaker (Lv 6), third cat and special items (Lv 7), rare coats and seasonal decor (Lv 8+). Progress panel becomes an unlocks track.

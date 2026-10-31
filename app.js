@@ -1,5 +1,5 @@
 // Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
-const APP_VERSION='0.3.2';
+const APP_VERSION='0.3.3';
 const APP_RELEASED='2026-10-31';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
@@ -294,8 +294,8 @@ function pixelNumber(n){const ds=String(n).split('').map(Number),W=ds.length*6-1
 const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
 // Phones generally can't share the mic between speech recognition and a recorder, so there we only transcribe.
 const isPhone=()=>matchMedia('(pointer: coarse)').matches;
-// Laptops default to Whisper (browser live text misses words there); phones default to quick, to spare mobile data.
-// High accuracy is the default everywhere: phone browsers' live recognition stops after the first pause.
+// High accuracy (Whisper, on this device) is the default everywhere: browsers' live recognition misses words, and on
+// phones stops after the first pause. A device where Whisper crashes twice switches to keyboard dictation.
 const transcriber=()=>state.transcriber||'whisper';
 // Phones get the smaller Whisper model (faster, ~40 MB); laptops the more accurate one (~79 MB).
 const whisperModel=()=>isPhone()?'Xenova/whisper-tiny.en':'Xenova/whisper-base.en';
@@ -447,8 +447,7 @@ function cancelSpeaking(){keepAwake(false);try{rec.pcm&&(rec.pcm.proc.disconnect
 function stepSpeak(){
   const target=state.duration*60;
   if(rec.phase==='prep'){const left=Math.max(1,Math.ceil((rec.prepEnd-Date.now())/1000));return `<div class="speak-stage">
-    <span class="eyebrow">PLAN YOUR ANSWER</span><b class="big-count" id="prep-count" data-n="${left}" aria-label="${left} seconds">${pixelNumber(left)}</b><p class="speak-topic">${esc(challenge.topic)}</p>
-    <p class="muted">Pick an opening, two or three points and a closing line. Recording stops by itself at ${mmss(state.duration*60)}.</p>
+    <span class="eyebrow">PLAN</span><b class="big-count" id="prep-count" data-n="${left}" aria-label="${left} seconds">${pixelNumber(left)}</b><p class="speak-topic">${esc(challenge.topic)}</p>
     <div class="speak-actions"><button class="secondary" id="rec-cancel">Cancel</button><button class="primary" id="rec-now">Start speaking now</button></div></div>`;}
   if(rec.phase==='rec'||rec.phase==='stopping'){const s=recSeconds();return `<div class="speak-stage live">
     <div class="rec-head"><span class="rec-dot"></span>${rec.phase==='stopping'?'Finishing…':'Recording'}<span class="mic-meter" title="Microphone level"><i id="mic-level"></i></span><b id="rec-clock">${mmss(s)} / ${mmss(target)}</b></div>
@@ -464,8 +463,9 @@ function stepSpeak(){
     <button class="secondary" id="rec-again" ${w?'disabled':''}>↻ Record again</button>`;}
   return `<div class="speak-stage">
     <i class="px-icon mic light big" aria-hidden="true"></i><h3>Ready to speak?</h3>
-    <p class="muted">${prep()} seconds to plan, then talk for about ${state.duration} min. ${dictating()?'You’ll talk into a text box using the microphone on your keyboard.':useWhisper()?'Your words are written out accurately on this device as you talk.':SpeechRec?'Your words are written down as you speak.':'This browser can’t write down speech, so you’ll add the transcript afterwards.'}</p>
-    <button class="primary" id="rec-start">Start</button><button class="mini" id="rec-type">I’ll type or paste it instead</button></div>`;
+    <ul class="speak-points"><li><b>Plan</b>${prep()} seconds</li><li><b>Talk</b>about ${state.duration} min</li>
+      <li><b>Words</b>${dictating()?'type with your keyboard’s mic':useWhisper()||SpeechRec?'written out for you':'typed in afterwards'}</li></ul>
+    <button class="primary" id="rec-start">Start</button></div>`;
 }
 
 // ---- High-accuracy transcript: Whisper in a background worker, on this device ----
@@ -520,15 +520,16 @@ function scoreStatus(){const n=SCORE_KEYS.filter(k=>challenge.scores[k]).length;
 // ---- Feedback: one tap sends the talk to the user's AI app; then copy its answer and paste it back ----
 // ChatGPT and Claude accept the message in the link (?q=), so it arrives already typed in; for the others we copy it.
 const AI_APPS=[['chatgpt','ChatGPT','https://chatgpt.com/?q='],['claude','Claude','https://claude.ai/new?q='],['gemini','Gemini','https://gemini.google.com/app'],['other','Other app','']];
-// Instant feedback (own API key or signed-in account) fills the answer in directly; the AI-app steps stay as the other way.
+// Instant feedback (signed in) fills the answer in directly; the AI-app steps stay as the other way.
 let coachBusy=false;
 function instantCard(got){
   const mode=instantMode();
-  if(!mode)return `<div class="instant-card"><div><h4>✨ Instant feedback</h4><p class="muted small">${cloudOn()?`Skip the copy and paste: <b>sign in</b> for ${coachLeft??'a few'} free AI feedbacks a day, or add your own Anthropic API key.`:'Skip the copy and paste: add your own Anthropic API key in Settings.'}</p></div>
-    <div class="instant-actions">${cloudOn()?`${CLOUD_CONFIG.google?'<button class="primary" data-sign-in="Google">Continue with Google</button>':''}<button class="${CLOUD_CONFIG.google?'secondary':'primary'}" data-sign-in="">Sign in with email</button>`:''}<button class="secondary" data-panel-tab="settings">Add an API key</button></div></div>`;
-  const left=mode==='account'&&coachLeft!=null?` · ${coachLeft} left today`:'';
-  return `<div class="instant-card${got?' done':''}"><div><h4>${got?'Feedback added ✓':'✨ Instant feedback'}</h4><p class="muted small">${coachBusy?`${esc(state.cat.name)} is reading your talk… about 10–30 seconds.`:`The AI reads your talk and fills in the feedback and scores${mode==='key'?' (your API key)':left}.`}</p></div>
-    <button class="${got?'secondary':'primary'}" id="instant-feedback" ${coachBusy||(mode==='account'&&coachLeft===0)?'disabled':''}>${coachBusy?'Getting feedback…':got?'Get new feedback':mode==='account'&&coachLeft===0?'None left today':'Get feedback'}</button></div>`;
+  // Not signed in: an invitation to sign in (instant feedback only comes with an account).
+  if(!mode)return cloudOn()?`<div class="instant-card"><div><h4>✨ Instant feedback</h4><p class="muted small">Skip the copy and paste: <b>sign in</b> for ${coachLeft??'a few'} free AI feedbacks a day.</p></div>
+    <div class="instant-actions">${CLOUD_CONFIG.google?'<button class="primary" data-sign-in="Google">Continue with Google</button>':''}<button class="${CLOUD_CONFIG.google?'secondary':'primary'}" data-sign-in="">Sign in with email</button></div></div>`:'';
+  const left=coachLeft!=null?` · ${coachLeft} left today`:'';
+  return `<div class="instant-card${got?' done':''}"><div><h4>${got?'Feedback added ✓':'✨ Instant feedback'}</h4><p class="muted small">${coachBusy?`${esc(state.cat.name)} is reading your talk… about 10–30 seconds.`:`The AI reads your talk and fills in the feedback and scores${left}.`}</p></div>
+    <button class="${got?'secondary':'primary'}" id="instant-feedback" ${coachBusy||(coachLeft===0)?'disabled':''}>${coachBusy?'Getting feedback…':got?'Get new feedback':coachLeft===0?'None left today':'Get feedback'}</button></div>`;
 }
 async function getInstantFeedback(){
   if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}
@@ -845,9 +846,6 @@ async function recolour(id,sp){
 // ---- Settings ----
 function settingsPanel(){return `
   ${accountCard()}
-  <section class="p-card"><h3>Instant feedback</h3><p class="muted small">Use your own <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> for unlimited instant feedback, billed to your Anthropic account (well under 1 US cent each). It is kept only on this device and sent only to Anthropic.</p>
-    ${aiKey()?`<div class="settings"><p class="muted small">Key saved: <b>sk-ant-…${esc(aiKey().slice(-4))}</b></p><button class="secondary" id="ai-key-remove">Remove key</button></div>`
-      :'<div class="name-row"><input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"><button class="secondary" id="ai-key-save">Save</button></div>'}</section>
   <section class="p-card"><h3>Transcription</h3>
     <div class="choice">${[['dictate','Keyboard dictation','Talk into the text box with your keyboard’s microphone. Most reliable on iPhone; no replay.'],['browser','Quick','Live text from your browser while you talk. Can miss words, especially around pauses.'],['whisper','High accuracy',`Whisper writes it out on this device after you stop. Catches more words, and keeps the recording for replay. One-time ~${isPhone()?40:79} MB download.`]].map(([k,t,d])=>`<button data-transcriber="${k}" class="${transcriber()===k?'active':''}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>
     ${transcriber()==='whisper'?(state.whisperReady?'<p class="muted small">Speech model downloaded ✓ Works offline.</p>':'<button class="secondary" id="whisper-prep">Download the speech model now</button>'):''}</section>
@@ -918,7 +916,7 @@ function bindPanel(){
   q('#spin')?.addEventListener('click',()=>spin(false)); q('#reroll')?.addEventListener('click',()=>spin(true));
   q('#transcript')?.addEventListener('input',e=>{challenge.transcript=e.target.value;saveQuest();}); q('#feedback')?.addEventListener('input',e=>setFeedback(e.target.value)); q('#feedback')?.addEventListener('paste',()=>setTimeout(render,50));
   q('#rec-start')?.addEventListener('click',startSpeaking);q('#rec-now')?.addEventListener('click',beginRecording);q('#rec-cancel')?.addEventListener('click',cancelSpeaking);
-  q('#rec-stop')?.addEventListener('click',stopRecording);q('#rec-type')?.addEventListener('click',()=>{rec={phase:'done'};render();$('#transcript')?.focus();});
+  q('#rec-stop')?.addEventListener('click',stopRecording);
   q('#rec-again')?.addEventListener('click',()=>{if(challenge.transcript.trim()&&!confirm('Record again? This replaces the current transcript.'))return;resetRecorder();challenge.transcript='';challenge.spokeSec=0;startSpeaking();});
   qa('[data-ai]').forEach(b=>b.onclick=()=>openAI(b.dataset.ai));
   q('#instant-feedback')?.addEventListener('click',getInstantFeedback);
@@ -931,8 +929,6 @@ function bindPanel(){
     try{await cloudDeleteAccount();toast('Account deleted. Your progress is still on this device.');render();}
     catch{e.currentTarget.disabled=false;toast('Couldn’t delete the account right now. Please try again.');}});
   q('#sync-now')?.addEventListener('click',async e=>{e.currentTarget.disabled=true;await cloudPush();await cloudPull(true);toast(syncMeta().dirty?'Couldn’t reach your account. It will retry.':'Progress synced ✓');render();});
-  q('#ai-key-save')?.addEventListener('click',()=>{const k=$('#ai-key').value.trim();if(!/^sk-ant-/.test(k)){toast('That doesn’t look like an Anthropic API key (it starts with sk-ant-).');return;}setAiKey(k);render();toast('API key saved on this device.');});
-  q('#ai-key-remove')?.addEventListener('click',()=>{setAiKey('');render();toast('API key removed from this device.');});
   q('#skip-feedback')?.addEventListener('click',()=>{if(confirm('Finish without AI feedback? You still get XP and coins, just a little less.'))completeQuest(true);});
   q('#go-speak')?.addEventListener('click',()=>{challenge.step=1;render();if(rec.phase==='idle'&&!challenge.transcript.trim())startSpeaking();});
   q('#paste-reply')?.addEventListener('click',async()=>{try{const t=await navigator.clipboard.readText();if(!t.trim()){toast('Nothing copied yet. Copy the AI’s answer first.');return;}setFeedback(t);render();toast(SCORE_KEYS.every(k=>challenge.scores[k])?'Answer added · scores filled in':'Answer added');}catch{toast('Paste was blocked. Press and hold the box below and choose Paste.');$('#feedback')?.focus();}});

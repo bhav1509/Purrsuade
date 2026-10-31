@@ -1,6 +1,6 @@
 // ---- Cloud (optional): sign in, back up / sync progress, and instant AI feedback ----
 // The Purrsuade backend on AWS (see cloud/README.md). With these empty the app works as before, fully on this device,
-// and only the "your own API key" option of instant feedback is offered.
+// and feedback is through the user's own AI app only.
 const CLOUD_CONFIG={
   api:'https://b656y245il3odhhf4l3fntwneu0emqws.lambda-url.ap-southeast-2.on.aws/',
   authDomain:'https://ap-southeast-2k4xfr0rzy.auth.ap-southeast-2.amazoncognito.com',
@@ -8,7 +8,9 @@ const CLOUD_CONFIG={
   google:true,
 };
 const cloudOn=()=>!!(CLOUD_CONFIG.api&&CLOUD_CONFIG.authDomain&&CLOUD_CONFIG.clientId);
-const AUTH_KEY='purrsuade-auth',PKCE_KEY='purrsuade-pkce',SYNC_KEY='purrsuade-sync',AI_KEY='purrsuade-anthropic-key';
+const AUTH_KEY='purrsuade-auth',PKCE_KEY='purrsuade-pkce',SYNC_KEY='purrsuade-sync';
+// Earlier versions could keep the user's own Anthropic API key on the device; that option is gone, so forget any.
+try{localStorage.removeItem('purrsuade-anthropic-key');}catch{}
 // Settings that belong to this device (speech model, crash guard…) stay out of the synced copy.
 const DEVICE_KEYS=['transcriber','whisperReady','whisperCrashes','backupSnooze','lastBackup'];
 const readJSON=k=>{try{return JSON.parse(localStorage.getItem(k)||'null');}catch{return null;}};
@@ -121,29 +123,19 @@ async function cloudBoot(){
 document.addEventListener('visibilitychange',()=>{if(!signedIn())return;if(document.hidden){if(syncMeta().dirty)cloudPush();}else cloudPull();});
 addEventListener('online',()=>{if(signedIn()&&syncMeta().dirty)cloudPush();});
 
-// ---- Instant AI feedback: through your account (a few free a day) or your own Anthropic API key ----
-const aiKey=()=>{try{return localStorage.getItem(AI_KEY)||'';}catch{return '';}};
-function setAiKey(k){try{if(k)localStorage.setItem(AI_KEY,k);else localStorage.removeItem(AI_KEY);}catch{}}
-// 'key' (own API key, unlimited), 'account' (signed in) or '' (copy-paste only).
-const instantMode=()=>aiKey()?'key':signedIn()?'account':'';
+// ---- Instant AI feedback: through your account (a few free a day) ----
+// 'account' (signed in) or '' (copy-paste with your own AI app only).
+const instantMode=()=>signedIn()?'account':'';
 let coachLeft=null;
 async function refreshCoachLeft(){if(!signedIn())return;try{const d=await api('/usage');if(d.remaining!==coachLeft){coachLeft=d.remaining;if(panel==='quest')render();}}catch{}}
 async function instantFeedback(){
-  const mode=instantMode(),talk={topic:challenge.topic,transcript:challenge.transcript,spokeSec:challenge.spokeSec||0,targetMin:state.duration};
-  if(mode==='account'){const d=await api('/coach',{method:'POST',body:JSON.stringify(talk)});coachLeft=d.remaining;return d.text;}
-  // Own key: straight from this browser to Anthropic. The key never leaves this device otherwise.
-  const {default:Anthropic}=await import('https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.132.1/+esm');
-  const client=new Anthropic({apiKey:aiKey(),dangerouslyAllowBrowser:true});
-  const msg=await client.messages.create({model:'claude-haiku-4-5',max_tokens:8000,messages:[{role:'user',content:coachPrompt()}]});
-  const text=msg.content.filter(b=>b.type==='text').map(b=>b.text).join('').trim();
-  if(msg.stop_reason==='refusal'||!text)throw Object.assign(new Error('no-answer'),{status:502});
-  return text;
+  const talk={topic:challenge.topic,transcript:challenge.transcript,spokeSec:challenge.spokeSec||0,targetMin:state.duration};
+  const d=await api('/coach',{method:'POST',body:JSON.stringify(talk)});coachLeft=d.remaining;return d.text;
 }
 // Plain-language reasons for the toast when instant feedback fails.
 function instantError(e){
-  if(instantMode()==='key'&&(e.status===429||e.status===529))return 'Anthropic is busy or your key hit its limit. Try again in a minute, or use your AI app below.';
-  if(e.status===429)return e.data?.error==='busy'?'Instant feedback is very busy today. Use your AI app below for now.':`That’s today’s ${e.data?.limit||''} free instant feedbacks. Use your AI app below, or add your own API key in Settings.`;
-  if(e.status===401)return instantMode()==='key'?'Your API key was not accepted. Check it in Settings → Instant feedback.':'Please sign in again.';
+  if(e.status===429)return e.data?.error==='busy'?'Instant feedback is very busy today. Use your AI app below for now.':`That’s today’s ${e.data?.limit||''} free instant feedbacks. Use your AI app below.`;
+  if(e.status===401)return 'Please sign in again.';
   if(!navigator.onLine)return 'You’re offline. Instant feedback needs the internet.';
   return 'Couldn’t get feedback right now. Try again, or use your AI app below.';
 }

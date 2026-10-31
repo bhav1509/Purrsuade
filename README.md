@@ -18,7 +18,7 @@ It's a web app you can install like a normal app (full screen, works offline).
 2. **Speak:** a short planning countdown, then talk while a timer tracks your target length.
    Your words are written out for you.
 3. **Feedback:** tap **Get feedback** for instant AI feedback: the scores and key points fill in by
-   themselves. It works when you're signed in (a few free a day) or have added your own Anthropic API key.
+   themselves. It works when you're signed in (a few free a day).
    Or use your own AI app (ChatGPT, Claude, Gemini or another): your talk opens there ready to send; copy the
    answer, come back and tap **Paste the answer**. Complete the quest for XP and coins (or skip feedback for the day).
 
@@ -43,14 +43,14 @@ Without an account everything stays on your device. With an account, your progre
 transcripts and feedback) is stored on Amazon Web Services; recordings never leave your device. High-accuracy
 transcription runs locally. Quick transcription uses the browser's speech service (Chrome sends audio to
 Google). Your talk only goes to an AI when you ask for feedback: instant feedback sends it to Claude (through
-AWS when signed in, or straight to Anthropic with your own key).
+AWS, when signed in).
 
 The backend is in [`cloud/`](cloud/README.md) (Cognito, Lambda, S3, DynamoDB, Bedrock).
 
 ## Features
 - Daily quest + unlimited practice, adaptive difficulty (1–7), 500 topics
 - In-app recording with planning countdown, timer and live transcript
-- Instant AI feedback (Claude) with your account or your own API key, or one-tap ChatGPT / Claude / Gemini
+- Instant AI feedback (Claude) when signed in, or one-tap ChatGPT / Claude / Gemini
 - Optional sign-in (Google or email) with automatic backup and sync across devices
 - XP, coins, levels, streaks; progress meters and a journal with a monthly calendar
 - Isometric pixel cat room with a garden: time-of-day sky, tap-to-pet, needs (food, water, litter, play)
