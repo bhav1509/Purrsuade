@@ -21,10 +21,11 @@ def room(style="cream_checker"):
     s = Spr(RW + RD + 60, RH + (RW + RD) // 2 + 60, RD + 30, RH + 30)
     s.box(-6, -6, -8, RW + 6, RD + 6, 8, floor, shade(floor, .9), shade(floor, .8))
     if st["pattern"] == "checker":
-        for i in range(0, RW, 16):
-            for j in range(0, RD, 16):
-                if (i // 16 + j // 16) % 2:
-                    s.poly([(i, j, 0), (min(i + 16, RW), j, 0), (min(i + 16, RW), min(j + 16, RD), 0), (i, min(j + 16, RD), 0)], alt)
+        # 18 u tiles: the 180 u floor is exactly 10 x 10 squares, the same grid the app shows when moving furniture.
+        for i in range(0, RW, 18):
+            for j in range(0, RD, 18):
+                if (i // 18 + j // 18) % 2:
+                    s.poly([(i, j, 0), (i + 18, j, 0), (i + 18, j + 18, 0), (i, j + 18, 0)], alt)
     elif st["pattern"] == "wood":
         for j in range(0, RD, 10):
             off = (j // 10 % 3) * 23

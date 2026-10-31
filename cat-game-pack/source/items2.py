@@ -78,12 +78,18 @@ def teepee(color=hexc("f2d9c4"), trim=hexc("d98f8f")):
     a = (0, 0, 44)
     s.poly([(14, -14, 0), (14, 14, 0), a], shade(color, .76))
     s.poly([(-14, 14, 0), (14, 14, 0), a], color)
-    s.poly([(-2, 14, 0), (8, 14, 0), (3, 14, 26)], shade(color, .5))             # entrance
+    s.poly([(-6, 14, 0), (12, 14, 0), (3, 14, 26)], shade(color, .36))           # entrance, cat-sized
     s.poly([(-14, 14, 0), (14, 14, 0), (14, 14, 4), (-14, 14, 4)], trim)
     s.poly([(14, -14, 0), (14, 14, 0), (14, 14, 4), (14, -14, 4)], shade(trim, .8))
     for (x, y) in ((-3, -3), (3, -3), (3, 3), (-3, 3)):
         s.line((x * .2, y * .2, 44), (x, y, 54), hexc("9a7656"))
     return s.finish()
+
+def _mirrored(spr):
+    """A piece turned a quarter (back against the x = 0 wall instead of y = 0): in this view that swaps x and y,
+    which is exactly a left-right flip of the drawing, so the lighting and outline stay the same as the original."""
+    img, (ax, ay) = spr
+    return img.transpose(Image.FLIP_LEFT_RIGHT), (img.width - 1 - ax, ay)
 
 def _turnable(s, turned, cx, cy):
     """Box drawer centred on (cx, cy). turned=True swaps the x and y axes: the piece rotated a quarter turn
@@ -98,36 +104,38 @@ def sofa(color="blue", turned=False):
     """2-seat sofa ~110 x 65 cm (70 x 40 u), centred on its floor point. Long side along x, back towards y=0
     (turned: long side along y, back towards x=0). Drawn far-to-near: the far arm before the seat and cushions,
     the near arm last, so the arms sit beside the seat instead of over it."""
+    if turned: return _mirrored(sofa(color))
     main, light = SOFT[color]
     s = Spr(260, 220, 130, 160)
-    L, D, A = 70, 40, 6                                               # length, depth, arm width
+    L, D, A, B = 70, 40, 6, 6                                         # length, depth, arm width, back depth
     box = _turnable(s, turned, L / 2, D / 2)
     box(0, 0, 0, L, D, 5, shade(main, .7))                            # plinth
-    box(0, 0, 5, L, 11, 35, main)                                     # backrest
-    box(0, 0, 5, A, D, 22, main)                                      # far arm
-    box(A, 11, 5, L - 2 * A, D - 11, 13, main)                        # seat base (between the arms)
+    box(0, 0, 5, L, B, 35, main)                                      # backrest, the full length
+    box(0, B, 5, A, D - B, 22, main)                                  # far arm, in front of the back
+    box(A, B, 5, L - 2 * A, D - B, 13, main)                          # seat base (between the arms)
     half = (L - 2 * A) / 2
-    box(A, 5, 18, half - 1, 6, 19, mix(main, light, .25))             # back cushions
-    box(A + half + 1, 5, 18, half - 1, 6, 19, mix(main, light, .25))
-    box(A, 11, 18, half - 1, D - 13, 5, mix(main, light, .35))        # seat cushions
-    box(A + half + 1, 11, 18, half - 1, D - 13, 5, mix(main, light, .35))
-    box(L - A, 0, 5, A, D, 22, main)                                  # near arm
+    box(A, B, 18, half - 1, 6, 17, mix(main, light, .25))             # back cushions, against the back
+    box(A + half + 1, B, 18, half - 1, 6, 17, mix(main, light, .25))
+    box(A, B + 6, 18, half - 1, D - B - 8, 5, mix(main, light, .35))  # seat cushions
+    box(A + half + 1, B + 6, 18, half - 1, D - B - 8, 5, mix(main, light, .35))
+    box(L - A, B, 5, A, D - B, 22, main)                              # near arm
     return s.finish()
 
 def armchair(color="rose", turned=False):
     """One-seat version of the sofa, 44 x 40 u, centred on its floor point: the same plinth, full-width back,
     arms, seat base and cushions, drawn far-to-near the same way. Seat top at z = 23."""
+    if turned: return _mirrored(armchair(color))
     main, light = SOFT[color]
     s = Spr()
-    L, D, A = 44, 40, 6                                               # length, depth, arm width
+    L, D, A, B = 44, 40, 6, 6                                         # length, depth, arm width, back depth
     box = _turnable(s, turned, L / 2, D / 2)
     box(0, 0, 0, L, D, 5, shade(main, .7))                            # plinth
-    box(0, 0, 5, L, 11, 35, main)                                     # backrest
-    box(0, 0, 5, A, D, 22, main)                                      # far arm
-    box(A, 11, 5, L - 2 * A, D - 11, 13, main)                        # seat base (between the arms)
-    box(A, 5, 18, L - 2 * A, 6, 19, mix(main, light, .25))            # back cushion
-    box(A, 11, 18, L - 2 * A, D - 13, 5, mix(main, light, .35))       # seat cushion
-    box(L - A, 0, 5, A, D, 22, main)                                  # near arm
+    box(0, 0, 5, L, B, 35, main)                                      # backrest, the full width
+    box(0, B, 5, A, D - B, 22, main)                                  # far arm, in front of the back
+    box(A, B, 5, L - 2 * A, D - B, 13, main)                          # seat base (between the arms)
+    box(A, B, 18, L - 2 * A, 6, 17, mix(main, light, .25))            # back cushion, against the back
+    box(A, B + 6, 18, L - 2 * A, D - B - 8, 5, mix(main, light, .35)) # seat cushion
+    box(L - A, B, 5, A, D - B, 22, main)                              # near arm
     return s.finish()
 
 def side_table(color=hexc("e8d4b8")):

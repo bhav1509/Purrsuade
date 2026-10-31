@@ -1,5 +1,5 @@
 // Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
-const APP_VERSION='0.3.0';
+const APP_VERSION='0.3.1';
 const APP_RELEASED='2026-10-31';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
@@ -29,7 +29,7 @@ outer: for(const [d,t] of BASE_TOPICS){for(const v of VARIATIONS){TOPICS.push({d
 const SKILLS=['clarity','structure','confidence','vocabulary','conciseness','grammar'];
 const LABEL={clarity:'Clarity',structure:'Structure',confidence:'Confidence',vocabulary:'Vocabulary',conciseness:'Conciseness',grammar:'Grammar',overall:'Overall'};
 
-function fresh(){return {xp:0,coins:80,streak:0,lastDaily:null,duration:2,room:'cream_checker',layout:{},history:[],cat:{name:'Miso',coat:'orange_tabby',hunger:82,thirst:82,cleanliness:82,happiness:82,lastUpdated:Date.now(),zeroSince:null,alive:true,born:today()},graves:[],owned:{coats:['orange_tabby'],rooms:['cream_checker'],items:[]},decor:{variants:{},extras:[],hidden:[]},version:1};}
+function fresh(){return {xp:0,coins:80,streak:0,lastDaily:null,duration:2,room:'cream_checker',layout:{},history:[],cat:{name:'Miso',coat:'orange_tabby',hunger:82,thirst:82,cleanliness:82,happiness:82,lastUpdated:Date.now(),zeroSince:null,alive:true,born:today()},graves:[],owned:{coats:['orange_tabby'],rooms:['cream_checker'],items:['plant_big_sky','cardboard_box']},decor:{variants:{},extras:[{id:'plant',sprite:'plant_big_sky',x:170,y:10},{id:'box',sprite:'cardboard_box',x:144,y:144}],hidden:[],starter:2},version:1};}
 function load(){try{return hydrate({...fresh(),...JSON.parse(localStorage.getItem(STORE)||'{}')});}catch{return fresh();}}
 function hydrate(d){const savedBorn=d.cat?.born;d.cat={...fresh().cat,...(d.cat||{})};d.graves=Array.isArray(d.graves)?d.graves:[];d.history=d.history||[];
   // Cats from before birthdays were tracked: born on the day of the first session (or after the previous cat).
@@ -38,9 +38,21 @@ function hydrate(d){const savedBorn=d.cat?.born;d.cat={...fresh().cat,...(d.cat|
   repairGraves(d);d.layout=d.layout&&typeof d.layout==='object'?d.layout:{}; d.coins=Number.isFinite(d.coins)?d.coins:80;
   // Coats and room styles used to be free in Settings: whatever was picked before the shop stays owned.
   const own=d.owned||{};d.owned={coats:[...new Set([...(own.coats||[]),'orange_tabby',d.cat.coat])],rooms:[...new Set([...(own.rooms||[]),'cream_checker',d.room])],items:Array.isArray(own.items)?own.items:[]};
-  // Perches, water fountains and ottomans left the shop; any already bought are taken out of the room.
-  const retired=/^(perch|fountain|ottoman)_/;d.owned.items=d.owned.items.filter(s=>!retired.test(s));
-  d.decor={variants:{...(d.decor?.variants||{})},extras:Array.isArray(d.decor?.extras)?d.decor.extras.filter(e=>!retired.test(e.sprite)):[],hidden:Array.isArray(d.decor?.hidden)?d.decor.hidden:[]};
+  // Perches, water fountains, ottomans, tunnels and sofas left the shop; any already bought are taken out of the
+  // room (tunnels and sofas are refunded).
+  const retired=/^(perch|fountain|ottoman|tunnel|sofa)_/,refund={tunnel:80,sofa:240};
+  d.coins+=d.owned.items.reduce((n,s)=>n+(refund[s.split('_')[0]]||0),0);d.owned.items=d.owned.items.filter(s=>!retired.test(s));
+  d.decor={variants:{...(d.decor?.variants||{})},extras:Array.isArray(d.decor?.extras)?d.decor.extras.filter(e=>!retired.test(e.sprite)):[],hidden:Array.isArray(d.decor?.hidden)?d.decor.hidden:[],starter:d.decor?.starter};
+  // Rooms used to come with a rug, shelf, lamp, pictures and more; now a new room has just the bed, bowls, litter
+  // tray, one window, a big plant and a cardboard box. A room from before keeps its floor pieces as things it owns
+  // (in the colour it had), so they can be put away and placed again from the shop like anything bought.
+  if(d.decor.starter!==2){
+    const OLD=[['rug','rug_sage',90,99],['plant','plant_big_sky',170,10],['shelf','shelf_sage',108,0],['treats','treat_jar_pink',126,27,['shelf',0]],
+      ['pot','plant_small_blush',144,27,['shelf',1]],['post','scratch_post_oak',27,153],['lamp','floor_lamp_cream',10,10],['cushion','floor_cushion_lavender',153,135],['yarn','toy_yarn_pink',108,117]];
+    for(const [id,sp,x,y,on] of OLD){if(d.decor.hidden.includes(id)||d.decor.extras.some(e=>e.id===id))continue;const sprite=d.decor.variants[id]||sp;
+      d.decor.extras.push({id,sprite,x,y});if(!d.owned.items.includes(sprite))d.owned.items.push(sprite);if(on&&!d.layout[id])d.layout[id]=['on',...on];}
+    for(const id of OLD.map(o=>o[0]))delete d.decor.variants[id];
+    d.decor.hidden=[];d.decor.starter=2;}
   return decayCat(d);}
 function save(){localStorage.setItem(STORE,JSON.stringify(state));cloudChanged();}
 // The quest in progress is kept under its own key so typing can save it without touching the cat's decay clock.
@@ -243,7 +255,7 @@ function gameView(){const c=state.cat,[,msg]=catMood(),health=catHealth(),daily=
       </div>
       ${arrange.on?arrangeBar()
         :`<button class="speak-btn${!daily&&!challenge?' due':''}" data-panel="quest"><i class="px-icon mic" aria-hidden="true"></i>${speak}</button>`}
-      <details class="care-menu"${careMenuOpen?' open':''}><summary><i class="hp hp-full" aria-hidden="true"></i>Care</summary><div class="care-menu-list">${CARE.map(careBtn).join('')}</div></details>
+      ${arrange.on?'<span></span>':`<details class="care-menu"${careMenuOpen?' open':''}><summary><i class="hp hp-full" aria-hidden="true"></i>Care</summary><div class="care-menu-list">${CARE.map(careBtn).join('')}</div></details>`}
     </div>
   </div>
   <aside class="panel${panel?' open':''}" aria-hidden="${!panel}">${panel?panelView():''}</aside>
@@ -657,29 +669,28 @@ const SHOP_PANEL=['shop','bag','Shop'];
 // Aisles of [name, price, sprites…]: each colour is bought once, then can be put away and placed again.
 const SHOP_FURNITURE=[
   ['Cat stuff',[['Cat tree',200,'cat_tree_mint','cat_tree_lilac','cat_tree_white'],['Cat condo',180,'condo_cream','condo_oak'],
-    ['Teepee',140,'teepee_cream_rose','teepee_grey_mint','teepee_white_blue'],['Cat bed',90,'bed_rose','bed_sage','bed_blue','bed_lavender','bed_teal','bed_grey'],
-    ['Scratcher',70,'scratcher_rose','scratcher_sage','scratcher_blue'],['Tunnel',80,'tunnel_pink','tunnel_green','tunnel_blue'],['Cardboard box',25,'cardboard_box']]],
-  ['Seats & rugs',[['Sofa',240,'sofa_rose','sofa_sage','sofa_blue','sofa_grey'],['Armchair',160,'armchair_lavender','armchair_rose','armchair_teal','armchair_grey'],
-    ['Stool',50,'stool_lilac','stool_blue','stool_cream','stool_grey'],['Rug',60,'rug_rose','rug_blue','rug_sage'],['Blanket',45,'blanket_rose','blanket_sage','blanket_blue','blanket_lavender']]],
-  ['Decor',[['Bookshelf',170,'bookshelf_full_oak','bookshelf_full_walnut','bookshelf_full_white'],['Aquarium',260,'aquarium_oak','aquarium_white'],
+    ['Teepee',140,'teepee_cream_rose','teepee_grey_mint','teepee_white_blue'],['Cushion bed',90,'bed_rose','bed_sage','bed_blue','bed_lavender','bed_teal','bed_grey'],
+    ['Scratching post',40,'scratch_post_oak','scratch_post_cream'],['Scratcher',70,'scratcher_rose','scratcher_sage','scratcher_blue'],['Cardboard box',25,'cardboard_box']]],
+  ['Seats & rugs',[['Armchair',160,'armchair_lavender','armchair_rose','armchair_teal','armchair_grey'],
+    ['Stool',50,'stool_lilac','stool_blue','stool_cream','stool_grey'],['Floor cushion',30,'floor_cushion_lavender','floor_cushion_blue','floor_cushion_grey','floor_cushion_rose','floor_cushion_sage','floor_cushion_teal'],
+    ['Rug',60,'rug_sage','rug_rose','rug_blue'],['Blanket',45,'blanket_rose','blanket_sage','blanket_blue','blanket_lavender']]],
+  ['Decor',[['Shelf',80,'shelf_sage','shelf_lilac','shelf_peach','shelf_sky'],['Bookshelf',170,'bookshelf_full_oak','bookshelf_full_walnut','bookshelf_full_white'],['Aquarium',260,'aquarium_oak','aquarium_white'],
     ['Side table',60,'side_table_oak','side_table_walnut','side_table_white'],['Big plant',70,'plant_big_mauve','plant_big_navy','plant_big_taupe','plant_big_sky'],
-    ['Floor lamp',90,'floor_lamp_mint','floor_lamp_pink','floor_lamp_cream']]],
+    ['Floor lamp',90,'floor_lamp_mint','floor_lamp_pink','floor_lamp_cream'],['Curtain window',120,'window_curtain_rose','window_curtain_blue','window_curtain_grey'],['Blind window',100,'window_blind_white','window_blind_lilac','window_blind_teal'],
+    ['Plant painting',40,'art_plant'],['Cat painting',40,'art_cat'],['Heart painting',40,'art_heart'],['Waves painting',40,'art_waves'],['Clock',50,'wall_clock_blue','wall_clock_pink']]],
   ['Small things',[['Small plant',35,'plant_small_blush','plant_small_butter','plant_small_sky','plant_small_white'],['Cactus',30,'cactus_terracotta','cactus_blue','cactus_white'],
-    ['Book stack',25,'book_stack'],['Ball',15,'toy_ball_pink','toy_ball_blue','toy_ball_green','toy_ball_yellow'],['Toy mouse',15,'toy_mouse_grey','toy_mouse_brown'],
+    ['Treat jar',20,'treat_jar_pink','treat_jar_blue','treat_jar_yellow'],['Book stack',25,'book_stack'],['Ball',15,'toy_ball_pink','toy_ball_blue','toy_ball_green','toy_ball_yellow'],['Toy mouse',15,'toy_mouse_grey','toy_mouse_brown'],
     ['Toy fish',15,'toy_fish_pastel','toy_fish_ocean','toy_fish_leaf'],['Feather wand',15,'toy_feather_wand_pink','toy_feather_wand_teal','toy_feather_wand_yellow'],
-    ['Yarn ball',15,'toy_yarn_blue','toy_yarn_green','toy_yarn_yellow']]],
+    ['Yarn ball',15,'toy_yarn_pink','toy_yarn_blue','toy_yarn_green','toy_yarn_yellow']]],
 ];
 const SHOP_ITEMS=SHOP_FURNITURE.flatMap(([,items])=>items);
-// [room item, name, price, colours]: the first colour is the one the room comes with.
+// New colours for what every room has, shown first in the Cat stuff aisle: [room item, name, price, colours]; the
+// first colour is the one the room comes with.
 const SHOP_COLOURS=[
-  ['rug','Rug',40,['rug_sage','rug_blue','rug_rose']],['bed','Bed',40,['basket_bed_sage','basket_bed_blue','basket_bed_rose']],
-  ['cushion','Floor cushion',30,['floor_cushion_lavender','floor_cushion_blue','floor_cushion_grey','floor_cushion_rose','floor_cushion_sage','floor_cushion_teal']],
-  ['plant','Plant',30,['plant_big_sky','plant_big_mauve','plant_big_navy','plant_big_taupe']],['lamp','Lamp',30,['floor_lamp_cream','floor_lamp_mint','floor_lamp_pink']],
-  ['shelf','Shelf',40,['shelf_sage','shelf_lilac','shelf_peach','shelf_sky']],['post','Scratching post',25,['scratch_post_oak','scratch_post_cream']],
+  ['bed','Bed',40,['basket_bed_sage','basket_bed_blue','basket_bed_rose']],
   ['litter','Litter tray',25,['litter_tray_mint','litter_tray_grey','litter_tray_lilac','litter_tray_pink']],
   ['food','Food bowl',20,['bowl_sky_kibble','bowl_blush_kibble','bowl_butter_kibble','bowl_lilac_kibble','bowl_mint_kibble','bowl_white_kibble']],
   ['water','Water bowl',20,['bowl_blush_water','bowl_sky_water','bowl_butter_water','bowl_lilac_water','bowl_mint_water','bowl_white_water']],
-  ['yarn','Yarn ball',15,['toy_yarn_pink','toy_yarn_blue','toy_yarn_green','toy_yarn_yellow']],
 ];
 // Colour dots for each colour name the sprites end in (kibble and water bowls are named by the bowl colour).
 const SWATCH={rose:'#d99a9c',sage:'#9cbf8e',blue:'#8fb2d9',grey:'#a9acb3',lavender:'#a99cc6',teal:'#5f9ea0',mint:'#a9dcc6',lilac:'#c4b8e6',white:'#f2f0ea',
@@ -694,57 +705,50 @@ const shopPick={};
 function furnitureName(sp){const [label,,...sprites]=SHOP_ITEMS.find(g=>g.includes(sp));return sprites.length<2?label:`${label} (${colourOf(sp)})`;}
 const priceTag=(price,owned,status)=>status?`<em class="using">${status}</em>`:owned?'<em>Owned</em>':`<em class="${state.coins<price?'short':''}">${COIN}${price}</em>`;
 function shopPanel(){
-  const tabs=[['furniture','Furniture'],['colours','Colours'],['room','Room'],['cat','Cat']];
+  const tabs=[['furniture','Furniture'],['look','Room & cat']];
   return `<div class="shop"><div class="shop-head"><span>Your coins</span><b>${COIN}${state.coins}</b></div>
   <div class="shop-tabs" role="tablist">${tabs.map(([k,l])=>`<button role="tab" aria-selected="${shopTab===k}" class="${shopTab===k?'active':''}" data-shop-tab="${k}">${l}</button>`).join('')}</div>
-  ${{furniture:shopFurniture,colours:shopColours,room:shopRooms,cat:shopCat}[shopTab]()}</div>`;
+  ${shopTab==='look'?shopLook():shopFurniture()}</div>`;
 }
-// A product card: the picked colour large, its colour dots (a mint corner on owned ones) and one button for what
-// to do; a mint frame marks what's in the room.
+// A product card: the picked colour large, then its colour dots with the picked colour's name and whether it's
+// yours, and one button for what to do; a mint frame marks what's in the room.
 function shopCard(key,label,sprites,pick,action,{status='',owns=()=>false}={}){
+  const note=status==='using'?'In your room':owns(pick)?'Yours':'';
   return `<article class="shop-card${status?' '+status:''}"><canvas data-sprite="${pick}" width="144" height="120"></canvas><b>${label}</b>
-    ${sprites.length>1?`<div class="swatches">${sprites.map(sp=>`<button class="swatch${sp===pick?' on':''}${owns(sp)?' own':''}" style="--c:${SWATCH[colourOf(sp)]||'#ccc'}" data-swatch="${key}" data-colour="${sp}" title="${cap(colourOf(sp))}" aria-label="${cap(colourOf(sp))}"></button>`).join('')}</div>`:''}
+    ${sprites.length>1?`<div class="swatches" role="radiogroup" aria-label="${label} colours">${sprites.map(sp=>`<button class="swatch${sp===pick?' on':''}${owns(sp)?' own':''}" style="--c:${SWATCH[colourOf(sp)]||'#ccc'}" data-swatch="${key}" data-colour="${sp}" role="radio" aria-checked="${sp===pick}" title="${cap(colourOf(sp))}" aria-label="${cap(colourOf(sp))}"></button>`).join('')}</div>
+    <span class="swatch-name">${cap(colourOf(pick))}${note?` · <i>${note}</i>`:''}</span>`:''}
     ${action}</article>`;
 }
 function shopFurniture(){
   const placed=new Set(state.decor.extras.map(e=>e.sprite)),own=sp=>state.owned.items.includes(sp);
-  const aisles=[...SHOP_FURNITURE.map(([a])=>a),'Yours'];
-  const chips=`<div class="shop-aisles">${aisles.map(a=>`<button class="${shopAisle===a?'active':''}" data-aisle="${a}">${a}</button>`).join('')}</div>`;
-  if(shopAisle==='Yours'){
-    const mine=SHOP_ITEMS.flatMap(([,,...sprites])=>sprites).filter(own),stored=[...ROOM_ITEMS,...WALL_ITEMS].filter(it=>state.decor.hidden.includes(it.id));
-    return chips+`<p class="muted small">Everything you’ve bought, and what you’ve put away from the room. Tap to put it away or bring it back; both are free.</p>`
-      +(mine.length||stored.length?`<div class="shop-grid">${[
-        ...mine.map(sp=>shopCard(sp,furnitureName(sp),[sp],sp,`<button class="shop-act" data-buy-item="${sp}">${placed.has(sp)?'Put away':'Place in room'}</button>`,{status:placed.has(sp)?'using':'owned'})),
-        ...stored.map(it=>{const sp=it.base?`${it.base}_left`:state.decor.variants[it.id]||it.sprite;return shopCard(it.id,it.name,[sp],sp,`<button class="shop-act" data-restore="${it.id}">Bring back</button>`,{status:'owned'});})].join('')}</div>`
-        :'<p class="empty-note">Nothing yet. Things you buy, and anything you put away in Move furniture, show up here.</p>');
-  }
+  const chips=`<div class="shop-aisles">${SHOP_FURNITURE.map(([a])=>`<button class="${shopAisle===a?'active':''}" data-aisle="${a}">${a}</button>`).join('')}</div>`;
+  if(!SHOP_FURNITURE.some(([a])=>a===shopAisle))shopAisle=SHOP_FURNITURE[0][0];
   const items=SHOP_FURNITURE.find(([a])=>a===shopAisle)[1];
-  return chips+`<p class="muted small">${shopAisle==='Small things'?'Small things can stand on the floor, a shelf (also inside its racks) or a side table.':`New things for ${esc(state.cat.name)}’s room. After buying, drag it where you like.`}</p>
-    <div class="shop-grid">${items.map(([label,price,...sprites])=>{
+  return chips+`<div class="shop-grid">${shopAisle==='Cat stuff'?colourCards():''}${items.map(([label,price,...sprites])=>{
       const pick=shopPick[label]||sprites.find(sp=>placed.has(sp))||sprites.find(own)||sprites[0],has=own(pick),here=placed.has(pick);
       const act=here?`<button class="shop-act" data-buy-item="${pick}">Put away</button>`:has?`<button class="shop-act" data-buy-item="${pick}">Place in room</button>`
         :`<button class="shop-act buy${state.coins<price?' short':''}" data-buy-item="${pick}">Buy · ${COIN}${price}</button>`;
       return shopCard(label,label,sprites,pick,act,{status:here?'using':has?'owned':'',owns:own});}).join('')}</div>`;
 }
-function shopColours(){
-  return '<p class="muted small">New colours for what came with the room. Buy a colour once, switch any time.</p><div class="shop-grid">'
-    +SHOP_COLOURS.map(([id,label,price,sprites])=>{const cur=state.decor.variants[id]||sprites[0],pick=shopPick['c:'+id]||cur,has=pick===sprites[0]||state.owned.items.includes(`${id}:${pick}`);
-      const act=pick===cur?'<button class="shop-act" disabled>In use</button>':has?`<button class="shop-act" data-recolour="${id}" data-colour="${pick}">Use this colour</button>`
-        :`<button class="shop-act buy${state.coins<price?' short':''}" data-recolour="${id}" data-colour="${pick}">Buy · ${COIN}${price}</button>`;
-      return shopCard('c:'+id,label,sprites,pick,act,{status:pick===cur?'using':'',owns:sp=>sp===sprites[0]||state.owned.items.includes(`${id}:${sp}`)});}).join('')+'</div>';
+// The bed, bowls and litter tray every room has: buy a colour once, switch any time.
+function colourCards(){
+  return SHOP_COLOURS.map(([id,label,price,sprites])=>{const cur=state.decor.variants[id]||sprites[0],pick=shopPick['c:'+id]||cur,owns=sp=>sp===sprites[0]||state.owned.items.includes(`${id}:${sp}`);
+    const act=pick===cur?'<button class="shop-act" disabled>In use</button>':owns(pick)?`<button class="shop-act" data-recolour="${id}" data-colour="${pick}">Use this colour</button>`
+      :`<button class="shop-act buy${state.coins<price?' short':''}" data-recolour="${id}" data-colour="${pick}">Buy · ${COIN}${price}</button>`;
+    return shopCard('c:'+id,label,sprites,pick,act,{status:pick===cur?'using':'',owns});}).join('');
 }
 // Re-draw the open panel in place, keeping where it was scrolled to.
 function refreshPanel(){const el=$('.panel'),top=$('.panel-body')?.scrollTop||0;if(!el||!panel)return;el.innerHTML=panelView();bindPanel();paintIcons();const b=$('.panel-body');if(b)b.scrollTop=top;}
-function shopRooms(){
-  return `<p class="muted small">Room styles · ${COIN}${ROOM_PRICE} each. Buy once, switch any time.</p><div class="room-grid shop-rooms">${ROOM_STYLES.map(k=>{const own=state.owned.rooms.includes(k);
-    return `<button data-room="${k}" data-buy-room="${k}" class="${state.room===k?'active':''}"><canvas width="112" height="100"></canvas><span>${cap(k.replace('_',' '))}</span>${priceTag(ROOM_PRICE,own,state.room===k&&'In use')}</button>`;}).join('')}</div>`;
-}
-function shopCat(){const c=state.cat;return `
-  <section class="p-card"><h3>Name</h3><p class="muted small">A new name for ${esc(c.name)} costs ${COIN}${RENAME_PRICE}.</p>
-    <div class="name-row"><input id="cat-name" maxlength="18" value="${esc(c.name)}" placeholder="Cat name"><button class="secondary" id="rename-cat">Rename</button></div></section>
+// The room's style and the cat's coat and name, together on one tab.
+function shopLook(){const c=state.cat;return `
+  <section class="p-card"><h3>Room style</h3><p class="muted small">${COIN}${ROOM_PRICE} each. Buy once, switch any time.</p>
+    <div class="room-grid shop-rooms">${ROOM_STYLES.map(k=>{const own=state.owned.rooms.includes(k);
+      return `<button data-room="${k}" data-buy-room="${k}" class="${state.room===k?'active':''}"><canvas width="112" height="100"></canvas><span>${cap(k.replace('_',' '))}</span>${priceTag(ROOM_PRICE,own,state.room===k&&'In use')}</button>`;}).join('')}</div></section>
   <section class="p-card"><h3>Coat</h3><p class="muted small">${COIN}${COAT_PRICE} each. Buy a coat once, switch any time.</p>
     <div class="coat-grid shop-coats">${CAT_COATS.map(k=>{const own=state.owned.coats.includes(k);
-      return `<button data-coat="${k}" data-buy-coat="${k}" class="${c.coat===k?'active':''}" title="${cap(k.replace('_',' '))}"><canvas width="64" height="64"></canvas>${priceTag(COAT_PRICE,own,c.coat===k&&'In use')}</button>`;}).join('')}</div></section>`;}
+      return `<button data-coat="${k}" data-buy-coat="${k}" class="${c.coat===k?'active':''}" title="${cap(k.replace('_',' '))}"><canvas width="64" height="64"></canvas>${priceTag(COAT_PRICE,own,c.coat===k&&'In use')}</button>`;}).join('')}</div></section>
+  <section class="p-card"><h3>Name</h3><p class="muted small">A new name for ${esc(c.name)} costs ${COIN}${RENAME_PRICE}.</p>
+    <div class="name-row"><input id="cat-name" maxlength="18" value="${esc(c.name)}" placeholder="Cat name"><button class="secondary" id="rename-cat">Rename</button></div></section>`;}
 // The game's own pixel dialog for a yes/no question (with a picture of the item); resolves true on OK.
 function ask({title,body,ok,cancel='Cancel',sprite}){return new Promise(done=>{
   showModal(`<h3>${title}</h3>${sprite?`<canvas class="ask-thumb" data-sprite="${sprite}" width="192" height="160"></canvas>`:''}<p>${body}</p>
@@ -756,23 +760,31 @@ async function pay(price,what,sprite){
   if(!await ask({title:`Buy ${what}?`,body:`You have ${COIN}${state.coins}.`,ok:`Buy · ${COIN}${price}`,sprite}))return false;
   state.coins-=price;return true;
 }
+// Placing something from the shop: on a laptop the shop stays open beside the room; on a phone it closes so the
+// whole room shows while the piece is moved.
+function placing(id){arrange.on=true;arrange.sel=id;if(!isWide())panel=null;}
+function renderKeepScroll(){const top=$('.panel-body')?.scrollTop||0;render();const b=$('.panel-body');if(b)b.scrollTop=top;}
 async function buyFurniture(sp){
   const [,price]=SHOP_ITEMS.find(g=>g.includes(sp)),name=furnitureName(sp),placed=state.decor.extras.find(e=>e.sprite===sp),own=state.owned.items.includes(sp);
   if(placed){if(await ask({title:`Put the ${name.toLowerCase()} away?`,body:'You can bring it back any time for free.',ok:'Put away',sprite:sp})){
     putAway(placed.id);refreshPanel();toast(`${name} put away.`);}return;}
-  const [x,y]=findFreeSpot(sp),piece={id:'x'+Date.now().toString(36),sprite:sp,x,y};
-  arrange.on=true;arrange.sel=piece.id;panel=null;
-  if(own){state.decor.extras.push(piece);applyRoom(performance.now());persist();toast(`${name} is back. Drag it where you like, then tap Done.`);return;}
+  cancelPending();
+  // A window, painting or clock goes on the clearest bit of wall; anything else on the clearest bit of floor.
+  const wall=isWallDecor(sp),spot=wall?freeWallSpot(sp):findFreeSpot(sp),id='x'+Date.now().toString(36);
+  if(!spot){toast('No room on the walls. Move or put away something there first.');return;}
+  const piece=wall?{id,sprite:sp,side:spot[0],along:spot[1],z:spot[2]}:{id,sprite:sp,x:spot[0],y:spot[1]};
+  placing(piece.id);
+  if(own){state.decor.extras.push(piece);applyRoom(performance.now());save();renderKeepScroll();toast(`${name} is back. Drag it where you like, then tap Done.`);return;}
   // Not bought yet: it goes into the room to be placed (and turned) first; the Buy button is in the arrange bar.
-  arrange.pending={...piece,price,name};applyRoom(performance.now());render();
+  arrange.pending={...piece,price,name};applyRoom(performance.now());renderKeepScroll();
   toast(`Drag the ${name.toLowerCase()} into place, then tap Buy.`);
 }
 async function buyPending(){
-  const pc=arrange.pending;if(!pc)return;const it=roomItems.find(i=>i.id===pc.id),[x,y]=itemPos(it);
-  if(!hostOf(it)&&!placementOk(pc.id,x,y)){toast('Move it to a clear spot first.');return;}
+  const pc=arrange.pending;if(!pc)return;const it=roomItems.find(i=>i.id===pc.id),w=wallItems.find(o=>o.id===pc.id);
+  if(w?!wallOk(pc.id,...wallPos(w)):!hostOf(it)&&!placementOk(pc.id,...itemPos(it))){toast('Move it to a clear spot first.');return;}
   if(!await pay(pc.price,`the ${pc.name.toLowerCase()}`,pc.turned?pc.sprite+'_turned':pc.sprite))return;
   const {price,name,...piece}=pc;state.owned.items.push(pc.sprite);state.decor.extras.push(piece);
-  arrange.pending=null;arrange.on=false;arrange.sel=null;applyRoom(performance.now());persist();cloudSyncSoon();
+  arrange.pending=null;arrange.on=false;arrange.sel=null;applyRoom(performance.now());save();renderKeepScroll();cloudSyncSoon();
   toast(`New ${name.toLowerCase()} for ${state.cat.name}!`);
 }
 // What's in the room under an id: a bought piece, a built-in piece or a wall item, with the name to show.
@@ -780,27 +792,19 @@ function roomPiece(id){
   const ex=state.decor.extras.find(e=>e.id===id);if(ex)return {id,name:furnitureName(ex.sprite)};
   const it=roomItems.find(i=>i.id===id)||wallItems.find(w=>w.id===id);return it&&{id,name:it.name,keep:it.keep};
 }
-// Put a piece away: bought ones go back to the shop, built-in ones to the shop's "Put away" row. Whatever stood
-// on it (a plant on a shelf) moves down to the floor.
+// Put a piece away (back to its card in the shop). Whatever stood on it (a plant on a shelf) moves down to the floor.
 function putAway(id){
-  for(const [k,l] of Object.entries(state.layout))if(l?.[0]==='on'&&l[1]===id){delete state.layout[k];const o=state.decor.extras.find(e=>e.id===k);if(o)[o.x,o.y]=findFreeSpot(o.sprite);}
+  const host=roomItems.find(i=>i.id===id);
+  for(const o of host?carried(host):[]){const spot=findFreeSpot(o.base),ex=state.decor.extras.find(e=>e.id===o.id);
+    if(ex){delete state.layout[o.id];[ex.x,ex.y]=spot;}else state.layout[o.id]=spot;}
   const ex=state.decor.extras.find(e=>e.id===id);
   if(ex){state.decor.extras=state.decor.extras.filter(e=>e!==ex);delete state.layout[id];}else if(!state.decor.hidden.includes(id))state.decor.hidden.push(id);
   if(arrange.sel===id)arrange.sel=null;
   applyRoom(performance.now());save();
 }
-// Bring a built-in piece back to where it stood, or the clearest spot if something else is there now.
-function restoreItem(id){
-  state.decor.hidden=state.decor.hidden.filter(h=>h!==id);applyRoom();
-  const it=roomItems.find(i=>i.id===id);
-  if(it&&!it.flat){const [x,y]=itemPos(it);if(!placementOk(id,x,y))state.layout[id]=findFreeSpot(it.base,it.turned);}
-  if(!it){const spot=findWallSpot(id);if(spot)state.layout[id]=spot;}
-  arrange.on=true;arrange.sel=id;panel=null;applyRoom(performance.now());persist();
-  toast(`${roomPiece(id).name} is back. Drag it where you like, then tap Done.`);
-}
 function cancelPending(){const pc=arrange.pending;if(!pc)return;arrange.pending=null;delete state.layout[pc.id];applyRoom(performance.now());}
 function endArrange(){cancelPending();arrange.on=false;arrange.sel=null;}
-// A quarter turn for the selected sofa / armchair, if there's room for it where it stands.
+// A quarter turn for the selected armchair, if there's room for it where it stands.
 function turnPiece(){
   const id=arrange.sel,pc=arrange.pending?.id===id?arrange.pending:state.decor.extras.find(e=>e.id===id);if(!pc||!canTurn(pc.sprite))return;
   const [x,y]=state.layout[id]||[pc.x,pc.y];
@@ -826,7 +830,8 @@ function bindArrangeBar(){
   // Back to the original spots; bought pieces go to the clearest free spots around them.
   $('[data-arrange-reset]')?.addEventListener('click',()=>{
     state.layout={};const extras=state.decor.extras;state.decor.extras=[];applyRoom();
-    for(const e of extras){[e.x,e.y]=findFreeSpot(e.sprite,e.turned);state.decor.extras.push(e);applyRoom();}
+    for(const e of extras){if(isWallDecor(e.sprite)){const w=freeWallSpot(e.sprite);if(w)[e.side,e.along,e.z]=w;}else [e.x,e.y]=findFreeSpot(e.sprite,e.turned);
+      state.decor.extras.push(e);applyRoom();}
     applyRoom(performance.now());save();render();toast('Furniture back in its original spots.');});
 }
 async function recolour(id,sp){
@@ -863,6 +868,11 @@ function accountCard(){
 }
 function esc(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}function cap(s){return s[0].toUpperCase()+s.slice(1);}
 
+// Zoom is the room's own: pinch on a phone, the + and - buttons on a laptop. A trackpad pinch (a ctrl + wheel event)
+// or a Safari gesture would otherwise zoom the whole page; keyboard zoom (Cmd +/-) still works.
+addEventListener('wheel',e=>{if(e.ctrlKey)e.preventDefault();},{passive:false});
+for(const t of ['gesturestart','gesturechange'])addEventListener(t,e=>e.preventDefault());
+
 // ---- Install as an app ----
 let installPrompt=null;
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;if(panel==='settings')render();});
@@ -887,15 +897,12 @@ function bind(){
   $('[data-level]')?.addEventListener('click',showLevel);
   const room=$('#room-canvas');
   if(room){
-    let lastPet=0;
     const redrawStill=()=>{}; // the animation loop redraws every frame
     const pet=e=>{if(!state.cat.alive||!catHit(room,e.clientX,e.clientY))return;
-      const now=performance.now();
-      // A second tap on the cat soon after the first zooms in on it.
-      if(now-lastPet<400){focusCat(room,{instant:reducedMotion(),onChange:redrawStill});lastPet=0;return;}
-      lastPet=now;catReaction={type:'pet',started:now};floatGain('♥','pet');tourEvent('pet');};
+      catReaction={type:'pet',started:performance.now()};floatGain('♥','pet');tourEvent('pet');};
     // Arrange mode: presses on furniture drag it instead of panning; the layout is saved on drop.
-    const grab=e=>arrange.on?grabItem(room,e,{onMove:redrawStill,onDrop:layout=>{state.layout=layout;setRoomLayout(layout,performance.now());save();refreshArrangeBar();}}):null;
+    const grab=e=>arrange.on?grabItem(room,e,{onMove:redrawStill,onDrop:(layout,id,stuck)=>{state.layout=layout;setRoomLayout(layout,performance.now());save();refreshArrangeBar();
+      if(stuck)toast(wallItems.some(w=>w.id===id)?'No room on that wall. Move or put away something there first.':'That spot is taken, so it stayed where it was.');}}):null;
     enableRoomCamera(room,{grab,pinch:matchMedia('(pointer: coarse)').matches,onTap:e=>{if(arrange.on)return;const g=graveAt(room,e.clientX,e.clientY);if(g){showGrave(g);return;}pet(e);},resetButton:$('.cam-reset'),zoomIn:$('[data-zoom="in"]'),zoomOut:$('[data-zoom="out"]'),onChange:redrawStill});
   }
   bindPanel();
@@ -934,7 +941,6 @@ function bindPanel(){
   q('#complete')?.addEventListener('click',()=>completeQuest(false));
   qa('[data-shop-tab]').forEach(b=>b.onclick=()=>{shopTab=b.dataset.shopTab;render();});
   qa('[data-buy-item]').forEach(b=>b.onclick=()=>buyFurniture(b.dataset.buyItem));
-  qa('[data-restore]').forEach(b=>b.onclick=()=>restoreItem(b.dataset.restore));
   qa('[data-aisle]').forEach(b=>b.onclick=()=>{shopAisle=b.dataset.aisle;refreshPanel();$('.panel-body').scrollTop=0;});
   qa('[data-swatch]').forEach(b=>b.onclick=()=>{shopPick[b.dataset.swatch]=b.dataset.colour;refreshPanel();});
   qa('[data-recolour]').forEach(b=>b.onclick=()=>recolour(b.dataset.recolour,b.dataset.colour));
@@ -994,7 +1000,7 @@ const TOUR=[
   {target:()=>$('.coins'),title:'Coins',body:()=>`You earn coins by speaking, and spend them on food, toys and treats.`},
   {target:careArea,title:'Look after them',body:()=>`Open <b>Care</b> and give ${esc(state.cat.name)} some water. It’s free!`,wait:'care',
     after:{target:careArea,body:()=>`Nice! Water and litter are free. Food, play and treats cost coins, which you earn by speaking.`}},
-  {target:()=>$('.cam-arrange'),title:'Make it yours',body:()=>`Tap here any time to move the furniture around the room. The bag next to it is the shop: new furniture, colours, room styles and coats.`},
+  {target:()=>$('.cam-arrange'),title:'Make it yours',body:()=>`Tap here any time to move the furniture around the room. The cart next to it is the shop: furniture, toys, room styles and coats.`},
   {target:()=>$('.hud-menu'),title:'Menu',body:()=>`Your quests, progress, journal and settings live here.`},
   {target:()=>$('.speak-btn'),title:'Your first quest',body:()=>`Ready? Tap <b>Speak</b> to spin a topic and practise for a couple of minutes.`,wait:'quest'},
 ];

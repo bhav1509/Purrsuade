@@ -15,76 +15,64 @@ const CARE_ICONS={food:'bowl_sky_kibble',water:'bowl_blush_water',litter:'litter
 // What the cat's thought bubble shows when that need is lowest.
 const NEED_ICONS={hunger:'bowl_sky_kibble',thirst:'bowl_blush_water',cleanliness:'litter_scoop_mint',happiness:'toy_yarn_pink'};
 
-// Wall decor: windows, pictures and the clock. Each can slide along either back wall (switching to that wall's
-// drawing) or be put away. `along` runs from the back corner, `z` is the bottom edge, in wall pixels.
+// Wall decor: the room comes with one window. It can slide along either back wall (switching to that wall's
+// drawing) but not be put away. `along` runs from the back corner, `z` is the bottom edge, in wall pixels.
 const WALL_ITEMS=[
-  {id:'window',base:'window_curtain_rose',name:'Window',side:'left',along:40,z:50},
-  {id:'art_plant',base:'art_plant',name:'Plant picture',side:'left',along:122,z:66},
-  {id:'art_heart',base:'art_heart',name:'Heart picture',side:'left',along:150,z:74},
-  {id:'window2',base:'window_blind_white',name:'Window',side:'right',along:30,z:54},
-  {id:'art_cat',base:'art_cat',name:'Cat picture',side:'right',along:100,z:80},
-  {id:'art_waves',base:'art_waves',name:'Waves picture',side:'right',along:124,z:90},
-  {id:'clock',base:'wall_clock_blue',name:'Clock',side:'right',along:150,z:96},
+  {id:'window',base:'window_curtain_rose',name:'Window',side:'left',along:26,z:50,keep:true},
 ];
 const WALL_TOP=136; // wall items stay below the top trim of the 140 px walls
-// Everything on the floor can be moved in arrange mode. [x, y] is the default spot; `pad` keeps the
-// footprint inside the room; `spot` is where the cat stands to use it ([dx, dy, z, face left]);
-// `carries` are items that sit on top and move with it ([sprite, dx, dy, z]); `keep` pieces the cat needs
-// every day can't be put away.
+// What every room has: the bed under the window, the litter tray on the other wall and the bowls together at the
+// front. They can be moved in arrange mode but not put away (`keep`). [x, y] is the default spot; `spot` is where
+// the cat stands to use it ([dx, dy, z, face left]). Everything else is bought in the shop (a new room starts with
+// a big plant and a cardboard box, see fresh() in app.js).
 const ROOM_ITEMS=[
-  {id:'rug',sprite:'rug_sage',name:'Rug',x:100,y:104,pad:30,flat:true,spot:[0,0,0,false]},
-  {id:'plant',sprite:'plant_big_sky',name:'Big plant',x:16,y:18,pad:8,shadow:9},
-  {id:'shelf',sprite:'shelf_sage',name:'Shelf',x:128,y:2,pad:2,carries:[['plant_small_blush',22,7,62],['treat_jar_pink',12,11,62]]},
-  {id:'bed',sprite:'basket_bed_sage',name:'Bed',x:54,y:54,pad:16,shadow:19,spot:[0,0,4,false],keep:true},
-  {id:'post',sprite:'scratch_post_oak',name:'Scratching post',x:28,y:150,pad:9,shadow:11},
-  {id:'lamp',sprite:'floor_lamp_cream',name:'Floor lamp',x:10,y:112,pad:6,shadow:7},
-  {id:'cushion',sprite:'floor_cushion_lavender',name:'Floor cushion',x:170,y:118,pad:9,shadow:9,spot:[-20,-6,0,true]},
-  {id:'litter',sprite:'litter_tray_mint',name:'Litter tray',x:160,y:62,pad:14,spot:[0,0,3,false],keep:true},
-  {id:'food',sprite:'bowl_sky_kibble',name:'Food bowl',bowl:['bowl_sky_kibble','bowl_sky_empty','hunger'],x:124,y:160,pad:6,shadow:6,spot:[-6,2,0,false],keep:true},
-  {id:'water',sprite:'bowl_blush_water',name:'Water bowl',bowl:['bowl_blush_water','bowl_blush_empty','thirst'],x:150,y:146,pad:6,shadow:6,spot:[-6,2,0,false],keep:true},
-  {id:'yarn',sprite:'toy_yarn_pink',name:'Yarn ball',x:84,y:132,pad:4,spot:[-6,0,0,false],keep:true},
+  {id:'bed',sprite:'basket_bed_sage',name:'Bed',x:27,y:54,shadow:19,spot:[0,0,4,false],keep:true},
+  {id:'litter',sprite:'litter_tray_mint',name:'Litter tray',x:162,y:54,spot:[0,0,3,false],keep:true},
+  {id:'food',sprite:'bowl_sky_kibble',name:'Food bowl',bowl:['bowl_sky_kibble','bowl_sky_empty','hunger'],x:54,y:162,shadow:6,spot:[-6,2,0,false],keep:true},
+  {id:'water',sprite:'bowl_blush_water',name:'Water bowl',bowl:['bowl_blush_water','bowl_blush_empty','thirst'],x:75,y:162,shadow:6,spot:[-6,2,0,false],keep:true},
 ];
 // Small things that can stand on a shelf or side table as well as on the floor.
-const SMALL=/^(plant_small|book_stack|cactus|toy_)/;
+const SMALL=/^(plant_small|book_stack|cactus|toy_|treat_jar)/;
 // Shelf spots [dx, dy, z] on pieces with a flat top or open shelves: three on top of a shelf and three on each of
 // its two open racks.
-const SURFACES={shelf:[[10,9,62],[25,9,62],[40,9,62],[10,15,43],[24,15,43],[38,15,43],[10,15,23],[24,15,23],[38,15,23]],
+const SURFACES={shelf:[[10,9,62],[25,9,62],[40,9,62],[10,11,43],[24,11,43],[38,11,43],[10,11,23],[24,11,23],[38,11,23],[10,11,3],[24,11,3],[38,11,3]],
   bookshelf_full:[[10,9,62],[25,9,62],[40,9,62]],side_table:[[0,0,32]]};
 // Open racks: after what stands on a rack (at height z) is drawn, these parts of the shelf are drawn again over it
 // (the board above and the near side panel, as [x, y, z, dx, dy, dz] boxes from the art pack), so things sit
 // inside the rack instead of in front of it.
-const SHELF_SIDE=[47,0,0,3,18,62],RACKS={shelf:[[23,[[3,0,40,44,18,3],SHELF_SIDE]],[43,[[3,0,59,44,18,3],SHELF_SIDE]]]};
+const SHELF_SIDE=[47,0,0,3,18,62],RACKS={shelf:[[3,[[3,0,20,44,18,3],SHELF_SIDE]],[23,[[3,0,40,44,18,3],SHELF_SIDE]],[43,[[3,0,59,44,18,3],SHELF_SIDE]]]};
 // Where the cat sits, sleeps or scratches at furniture: [dx, dy, z, animation, face left], from the art pack's seat
 // heights. Turned pieces swap dx and dy. For scratching, the cat stands in front of the post facing it, paws up.
-const PERCHES={sofa:[[-15,5,23,'sleep'],[15,5,23,'sit']],armchair:[[0,5,23,'sit']],cat_tree:[[8,8,37,'sit'],[-8,-8,96,'sleep']],
-  condo:[[8,-8,57,'sit']],scratcher:[[0,0,40,'sit'],[2,14,0,'scratch',false]],scratch_post:[[2,14,0,'scratch',false]],stool:[[0,0,27,'sit']],
-  bed:[[0,0,4,'sleep']],teepee:[[3,20,0,'sit']],aquarium:[[19,27,0,'sit']]};
+// 'inside' (condo, teepee) adds [door, inner, eyes]: the cat walks from the spot to the doorway and squeezes
+// through it (see drawSqueezing), and only its eyes show in the doorway ([dx, dy, z]) until it comes back out.
+const PERCHES={armchair:[[0,5,23,'sit']],cat_tree:[[8,-8,37,'sit'],[-8,8,65,'sit'],[-8,-8,96,'sleep']],
+  condo:[[8,-8,57,'sit'],[-1,20,0,'inside',false,[[-1,12],[-1,0],[-1,12,12]]]],scratcher:[[2,14,0,'scratch',false]],scratch_post:[[2,14,0,'scratch',false]],stool:[[0,0,27,'sit']],
+  bed:[[0,0,4,'sleep']],floor_cushion:[[0,0,4,'sit']],teepee:[[3,22,0,'inside',false,[[3,14],[3,2],[3,14,8]]]],aquarium:[[19,27,0,'sit']]};
 const kindOf=(table,name)=>Object.keys(table).filter(k=>name.startsWith(k)).sort((a,b)=>b.length-a.length)[0];
 // Shop purchases: `variants` recolours a built-in item ({id: sprite}); `extras` are bought pieces of furniture
 // ([{id, sprite, x, y, turned}]), which can be moved (and some turned) like the rest; `hidden` lists built-in
 // pieces that were put away.
 let roomItems=[],wallItems=[];
-// A piece can be turned a quarter when the pack has a `_turned` drawing of it (sofas, armchairs).
+// A piece can be turned a quarter when the pack has a `_turned` drawing of it (armchairs).
 const canTurn=name=>!!CAT_ATLAS.sprites[name+'_turned'];
 function setRoomDecor(decor){
   const variants=decor?.variants||{},hidden=new Set(decor?.hidden||[]);
-  const base=ROOM_ITEMS.filter(it=>!hidden.has(it.id)).map(it=>{const v=variants[it.id];if(!v||!CAT_ATLAS.sprites[v])return {...it,base:it.sprite};
-    return it.bowl?{...it,sprite:v,base:v,bowl:[v,v.replace(/_(kibble|water)$/,'_empty'),it.bowl[2]]}:{...it,sprite:v,base:v};});
+  const base=ROOM_ITEMS.filter(it=>!hidden.has(it.id)).map(it=>{const v=variants[it.id],small=SMALL.test(it.sprite);if(!v||!CAT_ATLAS.sprites[v])return {...it,base:it.sprite,small};
+    return it.bowl?{...it,sprite:v,base:v,small,bowl:[v,v.replace(/_(kibble|water)$/,'_empty'),it.bowl[2]]}:{...it,sprite:v,base:v,small};});
   const extras=(decor?.extras||[]).filter(e=>CAT_ATLAS.sprites[e.sprite]).map(e=>{const s=CAT_ATLAS.sprites[e.sprite],flat=/^(rug|blanket)_/.test(e.sprite),turned=!!e.turned&&canTurn(e.sprite);
     return {id:e.id,base:e.sprite,sprite:turned?e.sprite+'_turned':e.sprite,turned,x:e.x,y:e.y,shadow:flat?0:Math.min(16,Math.max(4,Math.round(s.w/6))),flat,extra:true,small:SMALL.test(e.sprite)};});
   roomItems=[...base,...extras].map(it=>({...it,pad:padOf(footprint(it)),surfaces:surfacesOf(it)}));
-  wallItems=WALL_ITEMS.filter(w=>!hidden.has(w.id)).map(w=>({...w,wall:true}));
+  // Bought windows, paintings and clocks: {id, sprite (the drawing's name without its wall), side, along, z}.
+  const onWalls=(decor?.extras||[]).filter(e=>isWallDecor(e.sprite)).map(e=>({id:e.id,base:e.sprite,side:e.side,along:e.along,z:e.z,extra:true}));
+  wallItems=[...WALL_ITEMS.filter(w=>!hidden.has(w.id)),...onWalls].map(w=>({...w,wall:true}));
   updateSpots();
 }
-// A shelf's free spots, leaving out any taken by what it already carries (the built-in shelf's plant and jar).
-function surfacesOf(it){
-  const k=kindOf(SURFACES,it.base);if(!k)return null;
-  return SURFACES[k].map(s=>(it.carries||[]).some(([,dx,dy,z])=>z===s[2]&&Math.abs(dx-s[0])<10&&Math.abs(dy-s[1])<10)?null:s);
-}
+const surfacesOf=it=>SURFACES[kindOf(SURFACES,it.base)]||null;
 // Floor footprint of each kind of piece, [x0, y0, x1, y1] around its floor point, from the art pack's sizes.
 // Pieces can't overlap (rugs and blankets lie under things); a turned piece swaps its x and y.
-const FOOTPRINTS={sofa:[-35,-20,35,20],armchair:[-22,-20,22,20],shelf:[0,0,50,18],bookshelf_full:[0,0,50,18],aquarium:[0,0,38,18],
-  cat_tree:[-16,-16,16,16],condo:[-14,-14,16,12],teepee:[-14,-14,14,14],tunnel:[-28,-8,28,8],basket_bed:[-15,-15,15,15],bed:[-13,-13,13,13],
+const FOOTPRINTS={armchair:[-22,-20,22,20],shelf:[0,0,50,18],bookshelf_full:[0,0,50,18],aquarium:[0,0,38,18],
+  rug:[-44,-44,44,44],blanket:[-14,-10,14,10],treat_jar:[-5,-5,5,5],
+  cat_tree:[-16,-16,16,16],condo:[-14,-14,16,12],teepee:[-14,-14,14,14],basket_bed:[-15,-15,15,15],bed:[-19,-19,19,19],
   litter_tray:[-15,-12,15,12],scratch_post:[-12,-12,12,12],scratcher:[-12,-12,12,12],stool:[-12,-12,12,12],
   floor_cushion:[-9,-9,9,9],side_table:[-10,-10,10,10],floor_lamp:[-7,-7,7,7],
   plant_big:[-8,-8,8,8],cardboard_box:[-14,-10,12,10],plant_small:[-5,-5,5,5],book_stack:[-6,-6,6,6],cactus:[-4,-4,4,4],bowl:[-6,-6,6,6],toy:[-4,-4,4,4]};
@@ -94,7 +82,7 @@ function footprint(it,turned=it.turned){
   return turned?[r[1],r[0],r[3],r[2]]:r;
 }
 const padOf=r=>Math.max(4,...r.map(Math.abs));
-const GRID=8; // pieces snap to half a floor tile
+const TILE=18,GRID=9; // the floor is 10 x 10 tiles of 18 u; pieces snap to half a tile
 // Is (x, y) inside the walls and clear of every other standing piece? `turned` checks a quarter turn there.
 function placementOk(id,x,y,turned){
   const it=roomItems.find(i=>i.id===id);if(!it)return false;
@@ -119,16 +107,21 @@ function findFreeSpot(name,turned=false){
 // ('@<item>:<n>') add, for raised seats, the floor point the cat jumps up from, the piece's depth and an animation:
 // [x, y, z, face left, floor x, floor y, depth, animation].
 const SPOT={};
+// For a raised spot on a piece with several levels (a cat tree): the lower levels the cat hops through on the way
+// up, lowest first, as [x, y, z]; it comes down the same way.
+const CLIMB={};
 // Saved positions from the app: {id: [x, y]} on the floor, ['on', shelf id, spot] on a shelf, or
 // ['left' | 'right', along, z] on a wall.
 let roomLayout={};
 // A piece's floor point, plus its height when it stands on a shelf: [x, y] or [x, y, z].
 function itemPos(it){
-  const h=hostOf(it);if(h){const [hx,hy]=itemPos(h),s=h.surfaces[roomLayout[it.id][2]];return [hx+s[0],hy+s[1],s[2]];}
+  const h=hostOf(it);if(h){const [hx,hy]=itemPos(h),s=h.surfaces[shelfPlace(it)[2]];return [hx+s[0],hy+s[1],s[2]];}
   const l=roomLayout[it.id];return typeof l?.[0]==='number'?l:[it.x,it.y];
 }
+// Where a small piece stands on a shelf, ['on', shelf id, spot]: its saved place, or where it starts (`on`).
+const shelfPlace=it=>{const l=roomLayout[it.id];return l?(l[0]==='on'?l:null):it.on?['on',...it.on]:null;};
 // The shelf a small piece stands on, or null (also when that shelf has been put away).
-function hostOf(it){const l=roomLayout[it.id];return l?.[0]==='on'?roomItems.find(o=>o.id===l[1]&&o.surfaces?.[l[2]])||null:null;}
+function hostOf(it){const l=shelfPlace(it);return l?roomItems.find(o=>o.id===l[1]&&o.surfaces?.[l[2]])||null:null;}
 const carried=host=>roomItems.filter(o=>hostOf(o)===host);
 function wallPos(w){const l=roomLayout[w.id];return l?.[0]==='left'||l?.[0]==='right'?l:[w.side,w.along,w.z];}
 const wallSprite=(w,side=wallPos(w)[0])=>CAT_ATLAS.sprites[`${w.base}_${side}`];
@@ -139,25 +132,44 @@ function wallOk(id,side,along,z){
   return !wallItems.some(o=>{if(o.id===id)return false;const [os,oa,oz]=wallPos(o),t=wallSprite(o);
     return os===side&&along<oa+t.wall_width_u&&oa<along+s.wall_width_u&&z<oz+t.height_px&&oz<z+s.height_px;});
 }
-// A free place on the walls for something brought back: its own spot if clear, otherwise the first gap.
-function findWallSpot(id){
-  const w=wallItems.find(o=>o.id===id);if(!w)return null;const [side,along,z]=wallPos(w);if(wallOk(id,side,along,z))return null;
-  for(const sd of [side,side==='left'?'right':'left'])for(let zz=z;zz<WALL_TOP;zz+=8)for(let a=2;a<178;a+=4)if(wallOk(id,sd,a,zz))return [sd,a,zz];
-  return null;
+// Wall decor is drawn once per wall: 'art_cat' is art_cat_left / art_cat_right.
+const isWallDecor=name=>!CAT_ATLAS.sprites[name]&&!!CAT_ATLAS.sprites[name+'_left'];
+// A clear spot on either wall for a new window, painting or clock, as near eye level as there is: [side, along, z].
+function freeWallSpot(base){
+  const probe={id:'_probe',base,wall:true};wallItems.push(probe);let spot=null;
+  for(let k=0;k<30&&!spot;k++){const z=60+(k%2?-1:1)*Math.ceil(k/2)*4;if(z<6||z>=WALL_TOP)continue;
+    for(const side of ['left','right'])for(let a=2;a<178&&!spot;a+=4)if(wallOk('_probe',side,a,z))spot=[side,a,z];}
+  wallItems.pop();return spot;
 }
 function updateSpots(){
   const fix=v=>Math.max(4,Math.min(176,v));
   for(const it of roomItems){if(!it.spot)continue;const [x,y]=itemPos(it),[dx,dy,z,f]=it.spot;SPOT[it.id]=[fix(x+dx),fix(y+dy),z,f];}
+  // The rug (or, without one, the clear floor nearest the middle) is where the cat sits and celebrates, and a toy
+  // on the floor is what it plays with (its own pretend ball when there's none).
+  const rug=roomItems.find(i=>i.flat&&!hostOf(i));SPOT.rug=rug?[...itemPos(rug),0,false]:[...openFloorNear(96,108),0,false];
+  const toy=roomItems.find(i=>i.base.startsWith('toy_')&&!hostOf(i));playToy=toy?.id;
+  SPOT.yarn=toy?[fix(itemPos(toy)[0]-6),itemPos(toy)[1],0,false]:SPOT.rug;
   // The cat sits below each window, facing it.
   for(const w of wallItems){if(!w.base.startsWith('window'))continue;const [side,a]=wallPos(w),m=a+wallSprite(w).wall_width_u/2;
     SPOT[w.id]=side==='left'?[24,fix(m),0,true]:[fix(m),24,0,false];}
   for(const k in SPOT)if(k[0]==='@')delete SPOT[k];
+  for(const k in CLIMB)delete CLIMB[k];
   for(const it of roomItems){const k=kindOf(PERCHES,it.base);if(!k)continue;
     const [x,y]=itemPos(it),[,,a1,b1]=footprint(it);
-    PERCHES[k].forEach(([dx,dy,z,anim,face],n)=>{if(it.turned)[dx,dy]=[dy,dx];
+    PERCHES[k].forEach(([dx,dy,z,anim,face,door],n)=>{const sw=p=>it.turned?[p[1],p[0],...p.slice(2)]:p;[dx,dy]=sw([dx,dy]);
       // Raised seats are reached by a jump from the floor in front of the piece.
       const g=z>6?(y+b1+8<=176?[x+dx,y+b1+8]:[x+a1+8,y+dy]):[x+dx,y+dy];
-      SPOT[`@${it.id}:${n}`]=[fix(x+dx),fix(y+dy),z,face,fix(g[0]),fix(g[1]),x+y,anim];});}
+      SPOT[`@${it.id}:${n}`]=[fix(x+dx),fix(y+dy),z,face,fix(g[0]),fix(g[1]),x+y,anim,...(door?door.map(sw).map(([u,v,w])=>[x+u,y+v,w??0]):[])];});
+    const raised=PERCHES[k].map((p,n)=>`@${it.id}:${n}`).filter(key=>SPOT[key][2]>6).sort((p,q)=>SPOT[p][2]-SPOT[q][2]);
+    raised.forEach((key,n)=>{CLIMB[key]=raised.slice(0,n).map(p=>SPOT[p].slice(0,3));});}
+}
+let playToy=null;
+// The floor point nearest (x, y) with room for the cat to sit, clear of every standing piece.
+function openFloorNear(x,y){
+  const clear=(px,py)=>px>=10&&py>=10&&px<=170&&py<=170&&!roomItems.some(o=>{if(o.flat||hostOf(o))return false;const [ox,oy]=itemPos(o),[a0,b0,a1,b1]=footprint(o);
+    return px>ox+a0-8&&px<ox+a1+8&&py>oy+b0-8&&py<oy+b1+8;});
+  for(let r=0;r<=90;r+=3)for(let k=0;k<Math.max(1,r*2);k++){const t=k/Math.max(1,r*2)*Math.PI*2,px=Math.round(x+r*Math.cos(t)),py=Math.round(y+r*Math.sin(t));if(clear(px,py))return [px,py];}
+  return [x,y];
 }
 function setRoomLayout(layout,time){
   roomLayout=layout||{};updateSpots();
@@ -239,50 +251,100 @@ function drawSky(ctx,W,H,time,px){
 
 // ---- Cat behaviour: a plan is a timeline of walk / stay segments. ----
 const WALK_SPEED=32; // world units per second
-// `from` is [x, y, z, face left] plus, when the cat is up on furniture, the floor point below and that piece's depth.
+// `from` is [x, y, z, face left] plus, when the cat is up on furniture, the floor point below and that piece's depth,
+// then the condo / teepee it's inside and the raised spot it's on (as spot keys).
 function buildPlan(start,from,steps,loop){
-  const segs=[];let t=0,pos=from.slice(0,3),flip=from[3],spot=null,ground=from[4]!=null?[from[4],from[5]]:null,depth=from[6];
-  const hop=(to,d)=>{segs.push({t0:t,t1:t+.6,from:pos,to,anim:'jump',flip,depth:d});t+=.6;pos=to;};
+  const segs=[];let t=0,pos=from.slice(0,3),flip=from[3],spot=null,ground=from[4]!=null?[from[4],from[5]]:null,depth=from[6],inside=from[7],perch=from[8];
+  const face=to=>{const dx=(to[0]-pos[0])-(to[1]-pos[1]);if(Math.abs(dx)>2)flip=dx<0;};
+  const hop=(to,d)=>{face(to);segs.push({t0:t,t1:t+.6,from:pos,to,anim:'jump',flip,depth:d,perch});t+=.6;pos=to;};
+  const pause=d=>{segs.push({t0:t,t1:t+.35,from:pos,to:pos,anim:'sit',flip,depth:d,perch});t+=.35;};
+  // A walk at the usual pace; through a doorway it's drawn in front of the piece (`d`), squeezing through (spot key).
+  const walk=(to,d,squeeze)=>{face(to);const dur=Math.max(.25,Math.hypot(to[0]-pos[0],to[1]-pos[1])/WALK_SPEED);
+    segs.push({t0:t,t1:t+dur,from:pos,to,anim:'walk',flip,depth:d,squeeze});t+=dur;pos=to;};
   for(const step of steps){
     if(step.to){
       const to=SPOT[step.to];spot=step.to;
+      if(inside&&SPOT[inside]){const s=SPOT[inside];walk([...s[8].slice(0,2),0],s[6],inside);walk(s.slice(0,3),s[6],inside);}inside=null;
       if(Math.hypot(to[0]-pos[0],to[1]-pos[1])<1&&Math.abs(to[2]-pos[2])<1){pos=to.slice(0,3);continue;}
-      // Down off the furniture first, then walk, then up onto the next piece.
-      if(pos[2]>6)hop([...(ground||pos.slice(0,2)),0],depth);
+      // Down off the furniture first (level by level on a cat tree), then walk, then up onto the next piece.
+      if(pos[2]>6){for(const v of [...(CLIMB[perch]||[])].reverse())if(v[2]<pos[2]-1){hop(v,depth);pause(depth);}hop([...(ground||pos.slice(0,2)),0],depth);}
+      perch=null;
       const up=to[2]>6,walkTo=up?[to[4],to[5],0]:to.slice(0,3),dist=Math.hypot(walkTo[0]-pos[0],walkTo[1]-pos[1]);
-      if(dist>=1){
-        const screenDx=(walkTo[0]-pos[0])-(walkTo[1]-pos[1]);if(Math.abs(screenDx)>2)flip=screenDx<0;
-        const dur=Math.max(.3,dist/WALK_SPEED);
-        segs.push({t0:t,t1:t+dur,from:pos,to:walkTo,anim:'walk',flip});t+=dur;pos=walkTo;
+      if(dist>=1)for(const leg of catRoute(pos,walkTo)){
+        face(leg);const dur=Math.max(.3,Math.hypot(leg[0]-pos[0],leg[1]-pos[1])/WALK_SPEED);
+        segs.push({t0:t,t1:t+dur,from:pos,to:leg,anim:'walk',flip});t+=dur;pos=leg;
       }
-      if(up)hop(to.slice(0,3),to[6]);
+      if(up){perch=step.to;for(const v of CLIMB[step.to]||[]){hop(v,to[6]);pause(to[6]);}hop(to.slice(0,3),to[6]);}
+      if(to[7]==='inside'){walk([...to[8].slice(0,2),0],to[6],step.to);walk([...to[9].slice(0,2),0],to[6],step.to);inside=step.to;}
       ground=up?[to[4],to[5]]:null;depth=up?to[6]:undefined;
     }else{
-      if(step.at){const at=SPOT[step.at];pos=at.slice(0,3);flip=step.flip??at[3]??flip;spot=step.at;
-        ground=at[2]>6?[at[4],at[5]]:null;depth=at[2]>6?at[6]:undefined;}
-      segs.push({t0:t,t1:t+step.dur,from:pos,to:pos,anim:step.anim,flip,spot:step.at,hearts:step.hearts,hideYarn:step.hideYarn,ground,depth});t+=step.dur;
+      if(step.at){const at=SPOT[step.at];pos=at[7]==='inside'?[...at[9].slice(0,2),0]:at.slice(0,3);flip=step.flip??at[3]??flip;spot=step.at;
+        ground=at[2]>6?[at[4],at[5]]:null;depth=at[2]>6||at[7]==='inside'?at[6]:undefined;inside=at[7]==='inside'?step.at:null;perch=at[2]>6?step.at:null;}
+      segs.push({t0:t,t1:t+step.dur,from:pos,to:pos,anim:step.anim,flip,spot:step.at,hearts:step.hearts,hideYarn:step.hideYarn,ground,depth,perch});t+=step.dur;
     }
   }
   return {start,segs,dur:t,loop,endSpot:spot};
+}
+// ---- Getting around: the cat walks round the furniture, not through it ----
+// The floor as a grid of 6 u cells; a cell is blocked under any standing piece grown by the cat's half-width,
+// except the pieces the cat starts in or is heading into (its bed, the litter tray…). A* over the grid, then
+// the corners it doesn't need are cut wherever the straight line between two points is clear. Where a gap is too
+// tight for the full margin `r` (a piece squeezed into a corner), it tries a thinner one, then just the outlines.
+const NAV=6,NAV_N=180/NAV,CAT_R=7;
+function catRoute(a,b,r=CAT_R){
+  const inside=(r,x,y)=>x>r[0]&&x<r[2]&&y>r[1]&&y<r[3];
+  const ends=r=>inside(r,a[0],a[1])||inside(r,b[0],b[1]);
+  const blocks=roomItems.filter(it=>!it.flat&&!hostOf(it)).map(it=>{const [x,y]=itemPos(it),[a0,b0,a1,b1]=footprint(it),
+    raw=[x+a0,y+b0,x+a1,y+b1],grown=[x+a0-r,y+b0-r,x+a1+r,y+b1+r];
+    // Right beside a piece (a bowl, the post) the cat may brush its edge, but still not walk through it.
+    return ends(raw)?null:ends(grown)?raw:grown;}).filter(Boolean);
+  const free=(x,y)=>x>=2&&y>=2&&x<=178&&y<=178&&!blocks.some(k=>inside(k,x,y));
+  const clear=(p,q)=>{const n=Math.ceil(Math.hypot(q[0]-p[0],q[1]-p[1])*2);
+    for(let i=1;i<n;i++)if(!free(p[0]+(q[0]-p[0])*i/n,p[1]+(q[1]-p[1])*i/n))return false;return true;};
+  if(clear(a,b))return [b];
+  const N=NAV_N,cellOf=([x,y])=>Math.min(N-1,Math.max(0,Math.floor(x/NAV)))+N*Math.min(N-1,Math.max(0,Math.floor(y/NAV))),
+    mid=c=>[(c%N+.5)*NAV,(Math.floor(c/N)+.5)*NAV];
+  // Join the grid at the nearest open cell reachable in a straight line (the cat may stand right against a bowl).
+  const join=p=>{const c0=cellOf(p);let best=null,d=Infinity;
+    for(let di=-2;di<=2;di++)for(let dj=-2;dj<=2;dj++){const i=c0%N+di,j=Math.floor(c0/N)+dj,c=i+N*j;if(i<0||j<0||i>=N||j>=N)continue;
+      const m=mid(c),e=Math.hypot(m[0]-p[0],m[1]-p[1]);if(e<d&&free(...m)&&clear(p,m)){best=c;d=e;}}return best;};
+  const s0=join(a),g=join(b),fallback=()=>r>3?catRoute(a,b,3):r>0?catRoute(a,b,0):[b];
+  if(s0==null||g==null)return fallback();
+  const open=new Set([s0]),cost=new Map([[s0,0]]),prev=new Map(),ok=c=>c===s0||c===g||free(...mid(c)),h=c=>Math.hypot(...mid(c).map((v,k)=>v-b[k]));
+  while(open.size){
+    let c=null;for(const o of open)if(c===null||cost.get(o)+h(o)<cost.get(c)+h(c))c=o;
+    if(c===g)break;open.delete(c);
+    const i=c%N,j=Math.floor(c/N);
+    for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++){
+      const ni=i+di,nj=j+dj,n=ni+N*nj;if((!di&&!dj)||ni<0||nj<0||ni>=N||nj>=N||!ok(n))continue;
+      if(di&&dj&&(!ok(ni+N*j)||!ok(i+N*nj)))continue; // no squeezing between two corners
+      const k=cost.get(c)+(di&&dj?1.414:1);if(k<(cost.get(n)??Infinity)){cost.set(n,k);prev.set(n,c);open.add(n);}
+    }
+  }
+  if(g!==s0&&!prev.has(g))return fallback();
+  const pts=[b];for(let c=g;;c=prev.get(c)){pts.unshift([...mid(c),0]);if(c===s0)break;}
+  const out=[];let from=a;
+  for(let k=0;k<pts.length;){let far=k;for(let m=pts.length-1;m>k;m--)if(clear(from,pts[m])){far=m;break;}out.push(from=pts[far]);k=far+1;}
+  return out;
 }
 function poseAt(plan,time){
   let t=(time-plan.start)/1000;
   if(plan.loop)t=((t%plan.dur)+plan.dur)%plan.dur;else t=Math.min(Math.max(t,0),plan.dur-.001);
   const seg=plan.segs.find(s=>t<s.t1)||plan.segs[plan.segs.length-1],k=(t-seg.t0)/(seg.t1-seg.t0);
   const lerp=i=>seg.from[i]+(seg.to[i]-seg.from[i])*k;
-  return {x:lerp(0),y:lerp(1),z:lerp(2),anim:seg.anim,flip:seg.flip,animT:t-seg.t0,hearts:seg.hearts,hideYarn:seg.hideYarn,reacting:!plan.loop,ground:seg.ground,depth:seg.depth};
+  return {x:lerp(0),y:lerp(1),z:lerp(2),anim:seg.anim,flip:seg.flip,animT:t-seg.t0,hearts:seg.hearts,hideYarn:seg.hideYarn,reacting:!plan.loop,ground:seg.ground,depth:seg.depth,spot:seg.spot,squeeze:seg.squeeze,perch:seg.perch};
 }
-const poseFrom=p=>[p.x,p.y,p.z,p.flip,p.ground?.[0],p.ground?.[1],p.depth];
+const poseFrom=p=>[p.x,p.y,p.z,p.flip,p.ground?.[0],p.ground?.[1],p.depth,p.anim==='inside'?p.spot:null,p.perch];
 const IDLE_STEPS={
   tired:[{at:'bed',anim:'sleep',dur:10}],
   sick:[{at:'bed',anim:'sleep',dur:12}],
 };
 // A happy cat naps, sits on the rug, then visits up to four favourite places: the windows, the cushion and
-// whatever furniture it can sit on (the sofa, the cat tree…), in a new order each time round.
+// whatever furniture it can sit on (the armchair, the cat tree…), in a new order each time round.
 function idleSteps(mood){
   if(mood!=='happy')return IDLE_STEPS[mood];
-  const visits=[...wallItems.filter(w=>SPOT[w.id]).map(w=>[w.id,'sit',4]),...(roomItems.some(i=>i.id==='cushion')?[['cushion','idle',2.5]]:[]),
-    ...Object.keys(SPOT).filter(k=>k[0]==='@').map(k=>[k,SPOT[k][7],{sleep:6,scratch:3}[SPOT[k][7]]||4])];
+  const visits=[...wallItems.filter(w=>SPOT[w.id]).map(w=>[w.id,'sit',4]),
+    ...Object.keys(SPOT).filter(k=>k[0]==='@').map(k=>[k,SPOT[k][7],{sleep:6,inside:6,scratch:3}[SPOT[k][7]]||4])];
   for(let i=visits.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[visits[i],visits[j]]=[visits[j],visits[i]];}
   return [{at:'bed',anim:'sleep',dur:5},{at:'bed',anim:'idle',dur:1.5},{to:'rug'},{at:'rug',anim:'sit',dur:4},{at:'rug',anim:'idle',dur:1.5},
     ...visits.slice(0,4).flatMap(([id,anim,dur])=>[{to:id},{at:id,anim,dur}]),{to:'bed'}];
@@ -296,7 +358,7 @@ const REACTION_STEPS={
   pet:[{anim:'sit',dur:2.2,hearts:true}],
   cheer:[{to:'rug'},{at:'rug',anim:'jump',dur:.6},{at:'rug',anim:'jump',dur:.6},{at:'rug',anim:'jump',dur:.6},{at:'rug',anim:'sit',dur:2,hearts:true}],
 };
-let catPlan=null,planReaction=null,planMood=null;
+let catPlan=null,planReaction=null,planMood=null,planRoom=null;
 function resetCatPlan(){catPlan=null;planReaction=null;planMood=null;}
 function currentPose(time,cat,reaction){
   // Below 1 heart the cat is sick: it stays curled up in bed and ignores toys and treats.
@@ -306,6 +368,10 @@ function currentPose(time,cat,reaction){
     const p=catPlan?poseAt(catPlan,reaction.started):null,from=p?poseFrom(p):SPOT.bed;
     catPlan=buildPlan(reaction.started,from,[...REACTION_STEPS[reaction.type],{to:mood==='happy'?'rug':'bed'}],false);planReaction=reaction;
   }
+  // Furniture moved (or bought, or put away): walk back to bed by the new routes, then pick the routine up again.
+  if(catPlan&&catPlan.loop&&!arrange.drag&&planRoom&&(planRoom[0]!==roomItems||planRoom[1]!==roomLayout)){
+    catPlan=buildPlan(time,poseFrom(poseAt(catPlan,time)),[{to:'bed'},{at:'bed',anim:'sleep',dur:.5}],false);catPlan.endSpot='bed';}
+  if(!arrange.drag)planRoom=[roomItems,roomLayout];
   if(catPlan&&!catPlan.loop&&time>=catPlan.start+catPlan.dur*1000){
     // Rejoin the idle loop at the spot the reaction finished on, so the cat never jumps.
     const end=catPlan.start+catPlan.dur*1000,idle=buildPlan(0,SPOT.bed,idleSteps(mood),true);
@@ -323,6 +389,39 @@ function drawCatFrame(ctx,coat,anim,animT,X,Y,flip){
   const [sx,sy,w,h]=a.rects[i],[fx,fy]=c.feetAnchor;
   ctx.save();ctx.translate(Math.round(X),Math.round(Y));if(flip)ctx.scale(-1,1);
   ctx.drawImage(atlasImage,sx,sy,w,h,-fx,-fy,w,h);ctx.restore();
+}
+// Going through the door of a condo or teepee: the cat is drawn in front of the piece minus every bit of it that
+// overlaps the piece's walls, so only what's in the doorway (or still outside) shows.
+const squeezeBuf=document.createElement('canvas');squeezeBuf.width=squeezeBuf.height=64;
+function drawSqueezing(ctx,coat,pose,X,Y){
+  const it=roomItems.find(i=>i.id===pose.squeeze.slice(1).split(':')[0]),eyes=SPOT[pose.squeeze]?.[10];
+  if(!it||!eyes){drawCatFrame(ctx,coat,pose.anim,pose.animT,X,Y,pose.flip);return;}
+  const s=CAT_ATLAS.sprites[it.sprite],[PX,PY]=project(...itemPos(it)),[EX,EY]=project(...eyes),ox=Math.round(PX-s.anchor[0]),oy=Math.round(PY-s.anchor[1]);
+  const x=squeezeBuf.getContext('2d'),bx=Math.round(X)-32,by=Math.round(Y)-48;x.clearRect(0,0,64,64);
+  drawCatFrame(x,coat,pose.anim,pose.animT,X-bx,Y-by,pose.flip);
+  // Only the part of the cat already through the doorway is behind the walls: going in (towards -y) a pixel k to
+  // the right of its feet is about k units further in, so that's everything right of (doorway - cat's y).
+  const past=Math.round(X-bx+pose.y-SPOT[pose.squeeze][8][1]);
+  x.save();x.beginPath();x.rect(past,0,64,64);x.clip();
+  x.globalCompositeOperation='destination-out';x.drawImage(wallMask(it.sprite,Math.round(EX)-ox,Math.round(EY)-oy),ox-bx,oy-by);
+  x.restore();ctx.drawImage(squeezeBuf,bx,by);
+}
+// A piece's walls as a mask the size of its sprite: every opaque pixel except the dark doorway joined to (sx, sy).
+const maskCache={};
+function wallMask(name,sx,sy){
+  const key=name+':'+sx+','+sy;if(maskCache[key])return maskCache[key];
+  const s=CAT_ATLAS.sprites[name],A=atlasData(),c=document.createElement('canvas');c.width=s.w;c.height=s.h;
+  const x=c.getContext('2d'),img=x.createImageData(s.w,s.h),px=(i,j)=>{const o=((s.y+j)*A.width+s.x+i)*4;return A.data.subarray(o,o+4);};
+  const lum=p=>p[0]*.3+p[1]*.59+p[2]*.11,door=new Uint8Array(s.w*s.h),lim=lum(px(sx,sy))*1.25+8,todo=[[sx,sy]];
+  while(todo.length){const [i,j]=todo.pop();if(i<0||j<0||i>=s.w||j>=s.h||door[j*s.w+i])continue;const p=px(i,j);if(p[3]<40||lum(p)>lim)continue;
+    door[j*s.w+i]=1;todo.push([i+1,j],[i-1,j],[i,j+1],[i,j-1]);}
+  for(let j=0;j<s.h;j++)for(let i=0;i<s.w;i++)if(px(i,j)[3]>40&&!door[j*s.w+i])img.data.set([0,0,0,255],(j*s.w+i)*4);
+  x.putImageData(img,0,0);return maskCache[key]=c;
+}
+// Two eyes glowing in a dark doorway, blinking now and then.
+function drawEyes(ctx,X,Y,time){
+  if(time%3200<160)return;ctx.fillStyle='#f3e37c';
+  ctx.fillRect(Math.round(X)-3,Math.round(Y),2,1);ctx.fillRect(Math.round(X)+1,Math.round(Y),2,1);
 }
 function drawHeart(ctx,X,Y,time){
   const y=Math.round(Y)-40-Math.floor(time/400)%2,x=Math.round(X)-3;ctx.fillStyle='#e0707f';
@@ -386,18 +485,6 @@ function fitCanvas(canvas){
     x+=cam.x*dpr;y+=cam.y*dpr;
   }
   return {scale,x:Math.round(x),y:Math.round(y),W:CW,H:CH,dpr,cx:W/2,cy:top+avail/2};
-}
-// Zoom in on the cat and centre it, easing over a moment (instantly with reduced motion).
-function focusCat(canvas,{zoom=2.25,instant=false,onChange}={}){
-  const cam=camFor(canvas),c=canvas._cat,v=canvas._view;if(!cam||!c||!v)return;
-  // Cat offset from the room's zoom centre in CSS px; room offsets scale linearly with zoom.
-  const ox=(c.x+c.w/2-v.cx)/v.dpr,oy=(c.y+c.h/2-v.cy)/v.dpr,z=Math.max(cam.zoom,Math.min(MAX_ZOOM,zoom)),k=z/cam.zoom;
-  const to={zoom:z,x:-(ox-cam.x)*k,y:-(oy-cam.y)*k},from={...cam},t0=performance.now();
-  // Read the clock directly: rAF timestamps can lag performance.now() taken in the tap handler.
-  const step=()=>{const p=instant?1:Math.max(0,Math.min(1,(performance.now()-t0)/350)),e=1-(1-p)**3;
-    cam.zoom=from.zoom+(to.zoom-from.zoom)*e;cam.x=from.x+(to.x-from.x)*e;cam.y=from.y+(to.y-from.y)*e;
-    canvas._camSync?.();onChange?.();if(p<1)requestAnimationFrame(step);};
-  step();
 }
 // Drag to pan; two-finger pinch to zoom when `pinch` is on. A press that barely moves is a tap.
 // `grab(e)` may claim a press (arrange mode) by returning {move, end}; otherwise the press pans.
@@ -493,40 +580,41 @@ function buildGarden(){
   const rm=CAT_ATLAS.rooms[roomStyle],P=GARDEN_PAD,c=document.createElement('canvas');
   c.width=rm.w+P.x*2;c.height=rm.h+P.top+P.bottom;const g=c.getContext('2d');g.translate(P.x,P.top);
   const G=GARDEN_G,[ox,oy]=rm.floorOrigin,top=oy-G,bot=oy+180+G,mid=(top+bot)/2,T=12;
-  // island sides: soil under the front-left and front-right edges
-  for(let y=Math.round(mid);y<=bot+T;y++){const k=Math.max(0,bot-y),hw=2*Math.min(bot-mid,k+T);
-    const hwTop=2*Math.max(0,bot-y);g.fillStyle='#8a6646';g.fillRect(ox-hw,y,hw-hwTop,1);g.fillStyle='#a07a55';g.fillRect(ox+hwTop,y,hw-hwTop,1);}
-  for(let i=0;i<260;i++){const t=hash(i+.3),side=t<.5?-1:1,u=hash(i+9.1),y=mid+u*(bot-mid),hw=2*(bot-y),dy=hash(i+4.2)*T;
+  // island sides: soil under the front-left and front-right edges, a band T deep that comes to a point at the front
+  for(let y=Math.round(mid);y<=bot+T;y++){const hw=2*Math.min(y-T-top,bot+T-y),hwTop=2*Math.max(0,bot-y);if(hw<=hwTop)continue;
+    g.fillStyle='#8a6646';g.fillRect(ox-hw,y,hw-hwTop,1);g.fillStyle='#a07a55';g.fillRect(ox+hwTop,y,hw-hwTop,1);}
+  for(let i=0;i<260;i++){const t=hash(i+.3),side=t<.5?-1:1,u=hash(i+9.1),y=mid+T+u*(bot-mid-T),hw=2*(bot-y),dy=hash(i+4.2)*(T-4);
     g.fillStyle=hash(i+2)<.5?'#74553a':'#b58c63';g.fillRect(Math.round(ox+side*(hw+hash(i+7)*0)-(side<0?1:0)*2),Math.round(y+2+dy),2,1);}
   // grass top, a pixel row at a time so the diamond edges stay crisp
   for(let y=top;y<=bot;y++){const hw=2*Math.min(y-top,bot-y);g.fillStyle='#9ccf7f';g.fillRect(ox-hw,y,hw*2,1);}
   // grass fringe hanging over the soil edge
-  for(let i=0;i<120;i++){const u=hash(i+20.5),y=mid+u*(bot-mid),hw=2*(bot-y),side=hash(i+3.3)<.5?-1:1;g.fillStyle='#7fb86a';g.fillRect(Math.round(ox+side*hw)-1,Math.round(y)+1,2,1+Math.floor(hash(i+5)*3));}
+  for(let i=0;i<120;i++){const u=hash(i+20.5),y=mid+T+u*(bot-mid-T),hw=2*(bot-y),side=hash(i+3.3)<.5?-1:1;g.fillStyle='#7fb86a';g.fillRect(Math.round(ox+side*hw)-1,Math.round(y)+1,2,1+Math.floor(hash(i+5)*3));}
   const inside=(x,y)=>x>-G+4&&y>-G+4&&x<180+G-4&&y<180+G-4,inRoom=(x,y)=>x>-6&&y>-6&&x<186&&y<186;
   // soft shadow where the room sits on the grass
   for(let y=oy;y<=oy+180+8;y++){const hw=2*Math.min(y-oy,oy+188-y);g.fillStyle='#86bb6c';g.fillRect(ox-hw-6,y+4,hw*2+12,1);}
+  const span=180+2*G,many=n=>Math.round(n*(span/380)**2),at=(x,y)=>project(x,y).map(Math.round),put=(X,Y,col)=>{g.fillStyle=col;g.fillRect(X,Y,1,1);};
+  // A random point on the grass at least `m` units clear of the room, and not behind it (where only a pixel or two
+  // would peek out past the walls).
+  const hidden=(x,y)=>{const [X,Y]=project(x,y),d=Math.abs(X-ox);return d<=192&&Y<=oy+192-d/2;};
+  const spot=(k,m=6)=>{const x=-G+hash(k)*span,y=-G+hash(k+.5)*span;return inside(x,y)&&!(x>-m&&y>-m&&x<180+m&&y<180+m)&&!hidden(x,y)?[x,y]:null;};
+  // patches of deeper grass, dithered so they stay soft
+  for(let i=0;i<many(9);i++){const c=spot(i+300,40);if(!c)continue;const [X,Y]=at(...c),rx=14+Math.round(hash(i+301)*16),ry=Math.round(rx/2);
+    for(let dy=-ry;dy<=ry;dy++){const hw=Math.round(rx*Math.sqrt(1-(dy/ry)**2));for(let dx=-hw;dx<=hw;dx++)if((dx+dy)%2===0&&Math.abs(dx)<hw-1+hash(dx*7+dy)*3)put(X+dx,Y+dy,'#93c878');}}
   // texture: light and dark tufts
-  for(let i=0;i<1400;i++){const x=-G+hash(i)*(180+2*G),y=-G+hash(i+.5)*(180+2*G);if(!inside(x,y)||inRoom(x,y))continue;
-    const [X,Y]=project(x,y),dark=hash(i+.9)<.55;g.fillStyle=dark?'#7fb86a':'#b5dd8f';
-    g.fillRect(Math.round(X),Math.round(Y),1,1);if(dark){g.fillRect(Math.round(X)-1,Math.round(Y)-1,1,1);g.fillRect(Math.round(X)+1,Math.round(Y)-1,1,1);}}
-  // stepping-stone path out from the front of the room
-  for(let k=0;k<5;k++){const t=196+k*15,[X,Y]=project(t+(k%2?3:-3),t);pixelBlob(g,X,Y+1,6,2,'#7d8a74');pixelBlob(g,X,Y,6,2,'#d9d2c3');g.fillStyle='#ece6da';g.fillRect(Math.round(X)-3,Math.round(Y)-1,3,1);}
-  // pond
-  {const [X,Y]=project(250,140);pixelBlob(g,X,Y,19,9,'#6f9f5c');pixelBlob(g,X,Y,17,8,'#87b9d8');pixelBlob(g,X+2,Y+1,13,6,'#9fcde6');g.fillStyle='#e6f4f8';g.fillRect(Math.round(X)-8,Math.round(Y)-3,5,1);g.fillRect(Math.round(X)+5,Math.round(Y)+2,3,1);
-    pixelBlob(g,X+10,Y-2,3,1,'#6cc08e');}
-  // flowers
+  for(let i=0;i<many(1400);i++){const c=spot(i);if(!c)continue;const [X,Y]=at(...c),dark=hash(i+.9)<.55;g.fillStyle=dark?'#7fb86a':'#b5dd8f';
+    g.fillRect(X,Y,1,1);if(dark){g.fillRect(X-1,Y-1,1,1);g.fillRect(X+1,Y-1,1,1);}}
+  // pebbles in twos and threes
+  for(let i=0;i<many(10);i++){const c=spot(i+500,10);if(!c)continue;const [X,Y]=at(...c);
+    for(let k=0;k<2+(i%2);k++){const px=X+k*3-2,py=Y+(k%2);g.fillStyle='#8f9a88';g.fillRect(px,py+1,3,1);g.fillStyle='#c9cdbf';g.fillRect(px,py,3,1);put(px,py,'#e4e6dc');}}
+  // a couple of tiny mushrooms
+  for(let i=0;i<many(3);i++){const c=spot(i+700,10);if(!c)continue;const [X,Y]=at(...c);
+    g.fillStyle='#efe3cf';g.fillRect(X,Y-1,1,2);g.fillStyle='#d9636f';g.fillRect(X-1,Y-3,3,1);g.fillRect(X-2,Y-2,5,1);put(X,Y-3,'#fbf6ee');}
+  // flowers: scattered singles, and a few clumps of one colour
   const FL=['#ff9ec4','#ffe39a','#fbf6ee','#b4a2ff'];
-  for(let i=0;i<170;i++){const x=-G+hash(i+50)*(180+2*G),y=-G+hash(i+51)*(180+2*G);if(!inside(x,y)||inRoom(x,y))continue;const [X,Y]=project(x,y);
-    if(Math.abs(X-ox)<9&&Y>oy+190)continue;const col=FL[i%4];g.fillStyle='#5d9a4c';g.fillRect(Math.round(X),Math.round(Y),1,2);
-    g.fillStyle=col;g.fillRect(Math.round(X)-1,Math.round(Y)-1,3,1);g.fillRect(Math.round(X),Math.round(Y)-2,1,3);g.fillStyle='#ffe39a';if(col!=='#ffe39a')g.fillRect(Math.round(X),Math.round(Y)-1,1,1);}
-  // bushes
-  const bush=(x,y,rr,berry)=>{const [X,Y]=project(x,y);pixelBlob(g,X,Y,rr+2,Math.ceil(rr/2),'#6f9f5c');pixelBlob(g,X,Y-rr+1,rr+1,rr,'#4f8a49');pixelBlob(g,X-1,Y-rr,rr,rr-1,'#6cae5c');pixelBlob(g,X-3,Y-rr-3,rr-4,rr-5,'#8fcd73');
-    if(berry)for(let j=0;j<5;j++){g.fillStyle=berry;g.fillRect(Math.round(X-rr+2+hash(j+x)*(rr*2-4)),Math.round(Y-rr*1.6+hash(j+y)*rr*1.3),2,2);}};
-  bush(205,150,8,'#ff9ec4');bush(155,210,9);bush(232,58,7,'#fbf6ee');bush(60,228,8,'#ffe39a');bush(245,205,6);bush(208,96,6);
-  // trees at the island's side corners
-  const tree=(x,y,h)=>{const [X,Y]=project(x,y);pixelBlob(g,X,Y,10,4,'#6f9f5c');g.fillStyle='#7a5a3f';g.fillRect(Math.round(X)-2,Math.round(Y)-h,4,h);g.fillStyle='#9a7650';g.fillRect(Math.round(X)-2,Math.round(Y)-h,1,h);
-    const cy=Y-h-6;pixelBlob(g,X,cy+2,15,12,'#3f7a45');pixelBlob(g,X-1,cy,14,11,'#5a9a52');pixelBlob(g,X-4,cy-4,9,7,'#7cbd66');pixelBlob(g,X-6,cy-7,4,3,'#a3d98a');};
-  tree(-40,205,20);tree(205,-40,22);tree(-20,250,16);
+  const flower=(X,Y,col)=>{g.fillStyle='#5d9a4c';g.fillRect(X,Y,1,2);g.fillStyle=col;g.fillRect(X-1,Y-1,3,1);g.fillRect(X,Y-2,1,3);if(col!=='#ffe39a')put(X,Y-1,'#ffe39a');};
+  for(let i=0;i<many(150);i++){const c=spot(i+50,10);if(c)flower(...at(...c),FL[i%4]);}
+  for(let i=0;i<many(8);i++){const c=spot(i+900,16);if(!c)continue;const [X,Y]=at(...c),col=FL[i%4];
+    for(let k=0;k<5;k++)flower(X+Math.round((hash(i*9+k)-.5)*14),Y+Math.round((hash(i*9+k+.3)-.5)*7),col);}
   return c;
 }
 function gardenFor(night){
@@ -551,16 +639,17 @@ function drawRoom(canvas,time,cat,reaction,style){
   if(roomBuf.width!==rm.w||roomBuf.height!==rm.h){roomBuf.width=rm.w;roomBuf.height=rm.h;}
   const b=roomBuf.getContext('2d');b.setTransform(1,0,0,1,0,0);b.globalCompositeOperation='source-over';b.clearRect(0,0,rm.w,rm.h);b.imageSmoothingEnabled=false;
   b.drawImage(atlasImage,rm.x,rm.y,rm.w,rm.h,0,0,rm.w,rm.h);
+  // The wall grid goes under the things hanging on the walls.
+  const wallPick=arrange.on&&wallItems.find(o=>o.id===(arrange.drag||arrange.sel));
+  if(wallPick)drawWallGrid(b);
   wallItems.forEach(w=>drawWallItem(b,w));
 
   const pose=cat.alive?currentPose(time,cat,reaction):null;
-  // Arrange mode: the tile grid and every standing piece's footprint on the floor (the one in hand is outlined
-  // again on top of the furniture, below), and an outline around the picked wall item.
-  if(arrange.on){drawFloorGrid(b);
-    for(const it of roomItems){if(it.flat||hostOf(it))continue;const [x,y]=itemPos(it),sel=it.id===(arrange.drag||arrange.sel);
-      drawFootprint(b,x,y,footprint(it),sel?'rgba(143,224,188,.45)':'rgba(29,24,48,.12)',sel?'rgba(70,170,130,1)':'rgba(29,24,48,.45)');}
-    const w=wallItems.find(o=>o.id===(arrange.drag||arrange.sel));
-    if(w){drawOutline(b,wallRect(w),'rgba(143,224,188,1)');if(typeof arrange.blocked?.[0]==='string')drawOutline(b,wallRect(w,arrange.blocked),'rgba(255,90,120,1)');}}
+  // Arrange mode: the floor grid with the picked piece's footprint shaded on it (red where it won't fit); for the
+  // window, the wall grid. The piece itself gets a ring round its own pixels, drawn after the furniture below.
+  const pick=arrange.on&&(arrange.drag||arrange.sel),pickWall=pick&&wallItems.find(o=>o.id===pick),pickIt=pick&&roomItems.find(i=>i.id===pick);
+  if(arrange.on&&!pickWall){drawFloorGrid(b);if(pickIt&&!hostOf(pickIt))drawFootprint(b,pickIt,...itemPos(pickIt),'rgba(143,224,188,.4)');
+    if(pickIt&&typeof arrange.blocked?.[0]==='number')drawFootprint(b,pickIt,...arrange.blocked,'rgba(255,90,120,.35)');}
   // Rugs lie flat under everything; the rest is depth-sorted by x + y (further back first). Small things on a
   // shelf are drawn with it.
   const items=[];
@@ -574,28 +663,37 @@ function drawRoom(canvas,time,cat,reaction,style){
     const kid=o=>drawPiece(o,lift+(arrange.drag===o.id?3:0));
     for(const [rz,boxes] of rack){kids.filter(o=>itemPos(o)[2]===rz).forEach(kid);
       const s=CAT_ATLAS.sprites[name],[X,Y]=project(x,y,z+lift);b.drawImage(spriteBoxes(name,boxes),Math.round(X-s.anchor[0]),Math.round(Y-s.anchor[1]));}
-    (it.carries||[]).forEach(([n,dx,dy,cz])=>drawSprite(b,n,x+dx,y+dy,cz+lift));
     if(it.id==='litter')drawLitterMess(b,x,y,cat.cleanliness,time);
     kids.filter(o=>!rack.some(([rz])=>itemPos(o)[2]===rz)).forEach(kid);};
   roomItems.forEach((it,i)=>{
-    if(it.id==='yarn'&&pose?.hideYarn||hostOf(it))return;
+    if(it.id===playToy&&pose?.hideYarn||hostOf(it))return;
     const [x,y]=itemPos(it),lift=arrange.drag===it.id?3:0,draw=()=>drawPiece(it,lift);
     if(it.flat)draw();else items.push({depth:x+y+i/1000+(lift?400:0),draw});
   });
-  let catXY=null;
+  let catXY=null,glowEyes=null;
   if(pose){
     // Small bias keeps the cat in front of the bed / litter tray it is sitting in; up on (or jumping onto) a
     // piece of furniture it is drawn just in front of that piece.
-    items.push({depth:pose.depth!=null?pose.depth+.5:pose.x+pose.y+(pose.z?1:0),draw:()=>{
+    const eyes=pose.anim==='inside'&&SPOT[pose.spot]?.[10];
+    // Inside a condo or teepee only the eyes show, drawn in their place (so whatever stands nearer hides them); the
+    // pixels of them still showing are lit again after the night tint so they glow in the dark.
+    if(eyes)items.push({depth:pose.depth+.5,draw:()=>{const [X,Y]=project(...eyes);drawEyes(b,X,Y,time);glowEyes=[Math.round(X)-3,Math.round(Y)];}});
+    else items.push({depth:pose.depth!=null?pose.depth+.5:pose.x+pose.y+(pose.z?1:0),draw:()=>{
       const [X,Y]=project(pose.x,pose.y,pose.z);catXY=[X,Y];
+      if(pose.squeeze){drawSqueezing(b,cat.coat,pose,X,Y);return;}
       if(!pose.z)drawShadow(b,pose.x,pose.y,0,8);
       drawCatFrame(b,cat.coat,pose.anim,pose.animT,X,Y+(pose.anim==='sleep'?2:0),pose.flip);
     }});
   }
   items.sort((a,c)=>a.depth-c.depth).forEach(it=>it.draw());
-  if(arrange.on){const it=roomItems.find(i=>i.id===(arrange.drag||arrange.sel));
-    if(it&&!hostOf(it)){const [x,y]=itemPos(it);drawFootprint(b,x,y,footprint(it),'rgba(0,0,0,0)','rgba(143,224,188,1)');}
-    if(it&&typeof arrange.blocked?.[0]==='number')drawFootprint(b,...arrange.blocked,footprint(it),'rgba(255,90,120,.35)','rgba(255,90,120,1)');}
+  if(glowEyes){const [x,y]=glowEyes,d=b.getImageData(x,y,6,1).data;glowEyes=[0,1,4,5].filter(i=>d[i*4]===243&&d[i*4+1]===227&&d[i*4+2]===124).map(i=>[x+i,y]);}
+  // Over everything: the ring round the picked piece (so it shows through what stands nearer), and a red one where
+  // it won't fit.
+  if(pickWall){const {s,x,y}=wallRect(pickWall);b.drawImage(spriteRing(s,PICK_RING),x-1,y-1);
+    if(typeof arrange.blocked?.[0]==='string'){const r=wallRect(pickWall,arrange.blocked);b.drawImage(spriteRing(r.s,BLOCK_RING),r.x-1,r.y-1);}}
+  if(pickIt){const s=CAT_ATLAS.sprites[pickIt.sprite],at=(x,y,z=0)=>{const [X,Y]=project(x,y,z);return [Math.round(X-s.anchor[0])-1,Math.round(Y-s.anchor[1])-1];};
+    const [x,y,z=0]=itemPos(pickIt);b.drawImage(spriteRing(s,PICK_RING),...at(x,y,z+(arrange.drag===pickIt.id?3:0)));
+    if(typeof arrange.blocked?.[0]==='number')b.drawImage(spriteRing(s,BLOCK_RING),...at(...arrange.blocked));}
 
   // Night: a cool tint over the room, then warm light pooling around each floor lamp.
   const night=nightAmount();
@@ -614,6 +712,7 @@ function drawRoom(canvas,time,cat,reaction,style){
     b.globalCompositeOperation='lighter';b.drawImage(glowBuf,0,0);
     b.globalCompositeOperation='source-over';
   }
+  if(glowEyes){b.fillStyle='#f3e37c';for(const [x,y] of glowEyes)b.fillRect(x,y,1,1);}
   if(catXY){
     const [X,Y]=catXY;
     if(pose.hearts)drawHeart(b,X,Y,time);
@@ -662,20 +761,42 @@ function bowlLevel(full,empty,frac){
 // Arrange mode: `drag` is the piece in hand, `sel` the last one touched (for Turn), `blocked` where it won't fit,
 // `pending` a shop piece being placed before it's bought.
 const arrange={on:false,drag:null,sel:null,blocked:null,pending:null};
-// Floor tiles (16 x 16 u) as crisp 1px lines.
+// A 1px line between two room points [x, y, z], stepped every half unit so slopes come out as clean pixel stairs.
+function isoLine(ctx,a,b){
+  const n=Math.ceil(Math.max(...a.map((v,k)=>Math.abs(b[k]-v)))*2);
+  for(let i=0;i<=n;i++){const [X,Y]=project(...a.map((v,k)=>v+(b[k]-v)*i/n));ctx.fillRect(Math.floor(X),Math.floor(Y),1,1);}
+}
+// Lines a shade darker than the floor (or wall) under them: the 10 x 10 floor tiles, edges included.
+const GRID_INK='rgba(70,45,30,.2)';
 function drawFloorGrid(ctx){
-  ctx.fillStyle='rgba(29,24,48,.28)'; // dark lines read on every floor style
-  for(let k=16;k<180;k+=16)for(let t=0;t<=180;t+=.5){let [X,Y]=project(k,t);ctx.fillRect(Math.round(X),Math.round(Y),1,1);[X,Y]=project(t,k);ctx.fillRect(Math.round(X),Math.round(Y),1,1);}
+  ctx.fillStyle=GRID_INK;
+  for(let k=0;k<=180;k+=TILE){isoLine(ctx,[k,0,0],[k,180,0]);isoLine(ctx,[0,k,0],[180,k,0]);}
 }
-// A piece's footprint as a filled diamond with a pixel outline.
-function drawFootprint(ctx,x,y,[a0,b0,a1,b1],fill,edge){
-  const pts=[[x+a0,y+b0],[x+a1,y+b0],[x+a1,y+b1],[x+a0,y+b1]].map(([a,c])=>project(a,c));
-  ctx.fillStyle=fill;ctx.beginPath();pts.forEach(([X,Y],i)=>i?ctx.lineTo(X,Y):ctx.moveTo(X,Y));ctx.closePath();ctx.fill();
-  ctx.fillStyle=edge;
-  for(let t=0;t<=1;t+=1/160)for(const [a,c] of [[x+a0+(a1-a0)*t,y+b0],[x+a0+(a1-a0)*t,y+b1],[x+a0,y+b0+(b1-b0)*t],[x+a1,y+b0+(b1-b0)*t]]){const [X,Y]=project(a,c);ctx.fillRect(Math.round(X),Math.round(Y),1,1);}
+// The same grid on both back walls, shown while a window, picture or the clock is picked: 10 columns and
+// 8 rows, so the squares end exactly at the floor and under the top trim.
+const WALL_ROW=WALL_TOP/8;
+function drawWallGrid(ctx){
+  ctx.fillStyle=GRID_INK;
+  for(let k=0;k<=180;k+=TILE){isoLine(ctx,[0,k,0],[0,k,WALL_TOP]);isoLine(ctx,[k,0,0],[k,0,WALL_TOP]);}
+  for(let z=0;z<=WALL_TOP;z+=WALL_ROW){isoLine(ctx,[0,0,z],[0,180,z]);isoLine(ctx,[0,0,z],[180,0,z]);}
 }
-// A 1px rectangle around a wall item ({s, x, y} from wallRect).
-function drawOutline(ctx,{s,x,y},col){ctx.fillStyle=col;ctx.fillRect(x-1,y-1,s.w+2,1);ctx.fillRect(x-1,y+s.h,s.w+2,1);ctx.fillRect(x-1,y,1,s.h);ctx.fillRect(x+s.w,y,1,s.h);}
+// The floor a piece takes up at x, y, shaded: its footprint, or the circle inside it for round things.
+const ROUND=/^(basket_bed|bed_|rug_|floor_cushion|bowl_|scratch_post|side_table|floor_lamp|plant_|stool|cactus|treat_jar|toy_)/;
+function drawFootprint(ctx,it,x,y,fill){
+  const [a0,b0,a1,b1]=footprint(it),cx=x+(a0+a1)/2,cy=y+(b0+b1)/2;
+  const pts=ROUND.test(it.base)?Array.from({length:48},(_,k)=>{const t=k/48*Math.PI*2;return [cx+(a1-a0)/2*Math.cos(t),cy+(b1-b0)/2*Math.sin(t),0];})
+    :[[x+a0,y+b0,0],[x+a1,y+b0,0],[x+a1,y+b1,0],[x+a0,y+b1,0]];
+  ctx.fillStyle=fill;ctx.beginPath();pts.map(p=>project(...p)).forEach(([X,Y],i)=>i?ctx.lineTo(X,Y):ctx.moveTo(X,Y));ctx.closePath();ctx.fill();
+}
+// A 1px ring just outside a sprite's own pixels (cached per sprite and colour), drawn one pixel up and left of it.
+const PICK_RING='#8fe0bc',BLOCK_RING='#ff5a78',ringCache=new Map();
+function spriteRing(s,colour){
+  const key=s.x+','+s.y+colour;if(ringCache.has(key))return ringCache.get(key);
+  const A=atlasData(),c=document.createElement('canvas');c.width=s.w+2;c.height=s.h+2;const x=c.getContext('2d'),img=x.createImageData(c.width,c.height);
+  const on=(i,j)=>i>=0&&j>=0&&i<s.w&&j<s.h&&A.data[((s.y+j)*A.width+s.x+i)*4+3]>40,rgb=[1,3,5].map(k=>parseInt(colour.slice(k,k+2),16));
+  for(let j=-1;j<=s.h;j++)for(let i=-1;i<=s.w;i++)if(!on(i,j)&&(on(i-1,j)||on(i+1,j)||on(i,j-1)||on(i,j+1)))img.data.set([...rgb,255],((j+1)*c.width+i+1)*4);
+  x.putImageData(img,0,0);ringCache.set(key,c);return c;
+}
 // Canvas pointer -> room-space pixel, and -> floor coordinates (z = 0).
 function roomPoint(canvas,clientX,clientY){
   const v=canvas._view,rc=canvas.getBoundingClientRect();if(!v)return null;
@@ -699,7 +820,7 @@ function itemAt(canvas,clientX,clientY){
   const order=roomItems.filter(it=>!hostOf(it)).map((it,i)=>({it,d:it.flat?-1:itemPos(it)[0]+itemPos(it)[1]+i/1000})).sort((a,c)=>c.d-a.d);
   const hit=it=>{const [x,y,z=0]=itemPos(it),name=typeof it.sprite==='function'?it.sprite({hunger:50,thirst:50}):it.sprite;return spriteHit(name,x,y,z,...p);};
   for(const {it} of order){const on=carried(it).find(hit);if(on)return on;
-    const [x,y]=itemPos(it);if(hit(it)||(it.carries||[]).some(([n,dx,dy,z])=>spriteHit(n,x+dx,y+dy,z,...p)))return it;}
+    if(hit(it))return it;}
   for(const w of [...wallItems].reverse()){const {s,x,y}=wallRect(w),sx=Math.floor(p[0]-x),sy=Math.floor(p[1]-y);
     if(sx>=0&&sy>=0&&sx<s.w&&sy<s.h&&atlasData().data[((s.y+sy)*atlasPixels.width+(s.x+sx))*4+3]>40)return w;}
   return null;
@@ -708,8 +829,14 @@ function itemAt(canvas,clientX,clientY){
 function slotAt(p,id){
   let best=null,bd=11;
   for(const h of roomItems){if(!h.surfaces||h.id===id)continue;const [hx,hy]=itemPos(h);
-    h.surfaces.forEach((s,k)=>{if(!s||roomItems.some(o=>o.id!==id&&roomLayout[o.id]?.[0]==='on'&&roomLayout[o.id][1]===h.id&&roomLayout[o.id][2]===k))return;
+    h.surfaces.forEach((s,k)=>{if(roomItems.some(o=>{const l=o.id!==id&&shelfPlace(o);return l&&l[1]===h.id&&l[2]===k;}))return;
       const [X,Y]=project(hx+s[0],hy+s[1],s[2]),d=Math.hypot(p[0]-X,p[1]-(Y-5));if(d<bd){bd=d;best=[h.id,k];}});}
+  return best;
+}
+// The free spot on a wall closest to (along, z), or null when nothing fits there.
+function nearestWallSpot(w,side,along,z){
+  const s=wallSprite(w,side);let best=null,bd=Infinity;
+  for(let a=2;a+s.wall_width_u<=178;a+=2)for(let h=6;h+s.height_px<=WALL_TOP;h+=2){const d=(a-along)**2+(h-z)**2;if(d<bd&&wallOk(w.id,side,a,h)){bd=d;best=[a,h];}}
   return best;
 }
 // Drag a window, picture or the clock along the walls, round the corner onto the other wall if wanted.
@@ -719,8 +846,10 @@ function grabWall(canvas,w,p,{onMove,onDrop}){
   return {
     move(ev){const q=roomPoint(canvas,ev.clientX,ev.clientY);if(!q)return;const [side,a,z]=wallAt(q),s=wallSprite(w,side);
       const along=Math.max(2,Math.min(178-s.wall_width_u,Math.round((a+off[0])/2)*2)),zz=Math.max(6,Math.min(WALL_TOP-s.height_px,Math.round((z+off[1])/2)*2));
-      if(wallOk(w.id,side,along,zz)){roomLayout={...roomLayout,[w.id]:[side,along,zz]};updateSpots();arrange.blocked=null;}else arrange.blocked=[side,along,zz];onMove?.();},
-    end(){arrange.drag=null;arrange.blocked=null;onDrop?.(roomLayout,w.id);},
+      // Over something else on that wall: the nearest free spot on the same wall; red only when the wall is full.
+      const spot=wallOk(w.id,side,along,zz)?[along,zz]:nearestWallSpot(w,side,along,zz);
+      if(spot){roomLayout={...roomLayout,[w.id]:[side,...spot]};updateSpots();arrange.blocked=null;}else arrange.blocked=[side,along,zz];onMove?.();},
+    end(){const full=!!arrange.blocked;arrange.drag=null;arrange.blocked=null;onDrop?.(roomLayout,w.id,full);},
   };
 }
 // Start dragging the item under the pointer; returns move/end handlers, or null if nothing is there.
@@ -758,7 +887,7 @@ function grabItem(canvas,e,{onMove,onDrop}={}){
       const [gx,gy]=floorAt(...q);
       const x=snap(gx+off[0],-a0,180-a1),y=snap(gy+off[1],-b0,180-b1),ok=placementOk(it.id,x,y);
       if(ok||loose){roomLayout={...roomLayout,[it.id]:[x,y]};updateSpots();if(ok)loose=false;arrange.blocked=null;}else arrange.blocked=[x,y];onMove?.();},
-    end(){arrange.drag=null;arrange.blocked=null;onDrop?.(roomLayout,it.id);},
+    end(){const stuck=!!arrange.blocked;arrange.drag=null;arrange.blocked=null;onDrop?.(roomLayout,it.id,stuck);},
   };
 }
 
@@ -777,7 +906,7 @@ function catAnchor(canvas){
 // Static icons: a pack sprite (or a cat's first idle frame) centred at whole-number zoom.
 function drawSpriteIcon(canvas,name,fill){
   const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
-  const s=CAT_ATLAS.sprites[name];if(!roomImagesLoaded||!s)return;
+  const s=CAT_ATLAS.sprites[name]||CAT_ATLAS.sprites[name+'_left'];if(!roomImagesLoaded||!s)return;
   // Whole-number zoom for small sprites; big ones (the litter tray) halve so pixels stay even. `fill` (shop
   // thumbnails, drawn on a double-resolution canvas) scales to fit so tall and wide pieces look the same size.
   const fit=Math.min((canvas.width-4)/s.w,(canvas.height-4)/s.h),k=fill?Math.min(fit,canvas.width/24):fit>=1?Math.floor(fit):fit>=.5?.5:.25;

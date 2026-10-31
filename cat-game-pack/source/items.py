@@ -51,19 +51,20 @@ def scratch_post(base=CREAMW):
     return s.finish()
 
 def cat_tree(plat=hexc("f5f3ee")):
-    """Three-level tower, ~150 cm. Staggered square platforms + sisal posts + pom-pom."""
+    """Three-level tower, ~150 cm: a low platform to the right, a middle one to the left and a top bed at the back,
+    each on its own sisal post so the levels read as separate steps. Drawn back to front."""
     s = Spr(260, 300, 130, 250)
     side = (SISAL, shade(SISAL, .86), shade(SISAL, .72))
     post = lambda x, y, z, h: s.cyl(x, y, z, 2.8, h, SISAL, side=side, stripes=SISAL2)
     s.box(-16, -16, 0, 32, 32, 4, plat)                 # base
-    post(-9, -9, 4, 62)                                 # tall back post
-    post(8, 8, 4, 30)                                   # short front post
-    s.box(-2, -2, 34, 20, 20, 3, plat)                  # level 1 (front)
-    s.box(-20, -20, 66, 22, 22, 3, plat)                # level 2 (back)
-    post(-9, -9, 69, 24)
+    post(-8, -8, 4, 89)                                 # tall back post, up to the top
+    post(-8, 8, 4, 58)                                  # left post
+    post(8, -8, 4, 30)                                  # right post
+    s.box(-16, 0, 62, 16, 16, 3, plat)                  # middle level (left)
+    s.box(0, -16, 34, 16, 16, 3, plat)                  # low level (right)
     s.box(-17, -17, 93, 18, 18, 3, plat)                # top
     s.ell(-8, -8, 96, 6, shade(plat, .86))              # top dip
-    X, Y = s.P(2, -20, 66)                              # pom-pom hanging off level 2
+    X, Y = s.P(-16, 16, 62)                             # pom-pom hanging off the middle level's left corner
     s.d.line([(X, Y), (X, Y + 13)], fill=shade(plat, .55))
     s.d.ellipse([X - 2, Y + 12, X + 2, Y + 16], fill=hexc("f0f0f0"))
     return s.finish()
@@ -91,10 +92,10 @@ def condo(body=hexc("efe3cf")):
     """Cube condo with entry hole and a lookout perch."""
     s = Spr(260, 260, 130, 210)
     s.box(-14, -14, 0, 30, 26, 26, body)
-    # entrance hole on left face (plane y = 12)
-    X, Y = s.P(-1, 12, 13)
-    s.d.ellipse([X - 7, Y - 8, X + 5, Y + 6], fill=hexc("4a3f3a"))
-    s.d.ellipse([X - 5, Y - 6, X + 3, Y + 4], fill=hexc("3a302c"))
+    # entrance hole on the left face (plane y = 12), big enough for the cat to walk through
+    X, Y = s.P(-1, 12, 11)
+    s.d.ellipse([X - 10, Y - 10, X + 8, Y + 9], fill=hexc("4a3f3a"))
+    s.d.ellipse([X - 8, Y - 8, X + 6, Y + 8], fill=hexc("3a302c"))
     s.cyl(8, -8, 26, 2.6, 28, SISAL, side=(SISAL, shade(SISAL, .86), shade(SISAL, .72)), stripes=SISAL2)
     s.cyl(8, -8, 54, 10, 3, body)
     s.ell(8, -8, 57, 7, shade(body, .88))
