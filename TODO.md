@@ -2,6 +2,75 @@
 
 Ideas for improving Purrsuade, roughly in priority order.
 
+## v1.0.0 launch (Sunday 1 November 2026)
+v0.2.0 (sign-in, cloud backup and sync, instant AI feedback, delete account, privacy page) is live. Details and the
+device checklist are in [LAUNCH.md](LAUNCH.md).
+
+Testers need time to use the app before launch, so they get the link on day one. Analytics goes in on day two so
+their sessions are recorded from then on. Feature freeze moves to Saturday because the analytics work comes first.
+
+**Wed 28 Oct: AWS settings, testers, shop decision**
+- [x] **Publish the Google sign-in first** (blocks testers). Google Cloud → Branding: homepage `https://bhav1509.github.io/Purrsuade/`, privacy policy `https://bhav1509.github.io/Purrsuade/privacy.html`, authorized domains `bhav1509.github.io` and `amazoncognito.com` → Audience → Publish app. Until then only listed test users can use Google sign-in.
+- [x] **Raise `GLOBAL_DAILY_LIMIT`** from 50 to ~200 (Lambda environment variables; at most ~$1 a day).
+- [x] **Cognito refresh token → 365 days** (App client → App client information → Edit).
+- [x] **CloudWatch log retention → 1 month** (`/aws/lambda/purrsuade-api`).
+- [x] **Budget alert covers the purrsuade project** (not just drobe).
+- [x] **Try email sign-up once.** Cognito's own sender allows ~50 emails a day; fine if most people use Google.
+- [x] **Calendar reminder for late March 2027:** the AWS free plan ends 20 April 2027 and the account is suspended unless upgraded.
+- [x] **Decide on the shop:** shipping it in v1.0.
+- [ ] **Test the shop on my own phone** (automated browser checks pass: buying, turning, shelves and racks, put away /
+      bring back, wall items, colours, room, coat, rename, reload, older saves). By hand: drag with a finger, the cat
+      on the sofa / armchair / cat tree, the shop aisles, and sync to a second device.
+- [x] **Release v0.3.0** with `scripts/release.sh minor "Shop: furniture, colours, room styles and coats"`.
+- [ ] **Message 3–5 LinkedIn testers** (including one less technical person) with the link; ask them to sign in.
+- [ ] Start device testing on my own phone: iPhone Safari, the installed iPhone app (sign-in is the biggest risk there).
+
+**Thu 29 Oct: build tracking and the feedback popups**
+Goal: see where signed-in beta testers drop off, and whether the idea is worth charging for.
+- [ ] **Usage events in the app.** `track(name, details)` queues events on the device (capped ~500) and sends them in
+      batches while signed in (every 30 s, on hide, on sign-in); events from before sign-in go up on first sign-in.
+      Events: app open, tour start/done/skip, spin/reroll, speak start/done/cancel, typed instead, instant feedback
+      (ok/failed/limit), copy to AI app, feedback skipped, quest complete/abandoned, care, shop buy, cat died/adopted,
+      sign in/out, delete account, install, own key added, survey answer/dismiss. Never the transcript.
+- [ ] **"Share usage" switch** in Settings → Privacy (on by default).
+- [ ] **Feedback popups**, answered once per account (stored in the synced progress):
+  - After the first finished quest: how useful (1–5), what would you pay a month (Nothing / $2 / $5 / $10+), what
+    would make it worth paying for (optional text).
+  - After the 5th quest: "How would you feel if you could no longer use Purrsuade?" (very / somewhat / not
+    disappointed; 40%+ "very" is a good sign), main benefit (optional text).
+- [ ] **`POST /events` in the Lambda.** Up to 100 events per call, validated; stored in the existing `purrsuade-usage`
+      table as one item per user per day (`EV#<user id>#<date>`), kept 13 months. Delete account removes them too.
+      Deploy by zip upload (no new AWS resources or permissions).
+- [ ] **Privacy policy:** what's recorded (actions, not what you say), why, how long, and the opt-out. Decide on an email contact.
+- [ ] Release v0.3.x; check on the laptop that events reach DynamoDB.
+
+**Fri 30 Oct: dashboard and device testing**
+- [ ] **Local dashboard** `node scripts/dashboard.mjs` → `http://localhost:8787`, rereads DynamoDB + Cognito users
+      (`purrsuade` profile) on every refresh; nothing with emails is committed. Shows: headline numbers (users, active
+      today / 7 days, quests, next-day and 7-day return, usefulness, would pay, % very disappointed), the funnel
+      (opened → spun → spoke → finished speaking → feedback → quest done → came back → 3+ quests), a day 0–7 retention
+      grid by start date, one row per user with where they stopped and a click-through timeline, survey answers and
+      comments, and feature use (instant vs copy-paste vs own key, transcription mode, shop and cat care).
+- [ ] Full QA checklist in LAUNCH.md on iPhone Safari, the installed iPhone app, Android Chrome and laptop: sync between
+      two devices, offline, sign out/in, delete account (events gone too), own API key, copy-paste with ChatGPT and Claude, both popups.
+- [ ] Fix what comes up (patch releases); read the testers' first data in the dashboard.
+- [ ] **Clean up the UI and the topics.** Go through every panel on phone and laptop and list what looks rough
+      (spacing, wording, buttons, empty states); read through the topic list and remove weak, repeated or awkward
+      prompts. Fix it before Saturday's freeze, since the demo video shows both.
+
+**Sat 31 Oct: feature freeze and launch content**
+- [ ] Feature freeze: bug fixes only from here.
+- [ ] Demo video (60–90 s, vertical, captions; shot list in LAUNCH.md), recorded on the final build.
+- [ ] 3–4 screenshots for the post.
+- [ ] Edit the LinkedIn post draft in LAUNCH.md into my own voice; schedule it if possible.
+- [ ] Check the dashboard and tester comments; fix anything that blocks launch.
+- [ ] Final pass of the LAUNCH.md checklist.
+
+**Sun 1 Nov: launch day**
+- [ ] `scripts/release.sh 1.0.0 "Public launch"`, then check the live site on a phone (Settings → About shows 1.0.0).
+- [ ] Post on LinkedIn with the video.
+- [ ] Watch CloudWatch logs and GitHub issues for the first day.
+
 ## Fixes
 - [x] **Save a quest in progress.** The current quest (topic, transcript, scores) only lives in memory, so a reload or closing the app on a phone loses it.
 - [x] **Pause the room when it's hidden.** On phone, a full-screen panel covers the room but it keeps animating behind it and draining battery.

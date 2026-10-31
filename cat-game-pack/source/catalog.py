@@ -56,8 +56,8 @@ for n, c in [("blue", hexc("8fb2d9")), ("pink", hexc("e9a0b4")), ("green", hexc(
 add("cardboard_box", J.cardboard_box())
 for n, (c, t) in [("cream_rose", (hexc("f2d9c4"), hexc("d98f8f"))), ("grey_mint", (hexc("dcdde2"), hexc("8fc4b0"))), ("white_blue", (hexc("f6f4f0"), hexc("8fb2d9")))]:
     add(f"teepee_{n}", J.teepee(c, t))
-for c in ("blue", "grey", "sage", "rose"): add(f"sofa_{c}", J.sofa(c))
-for c in ("rose", "teal", "lavender", "grey"): add(f"armchair_{c}", J.armchair(c))
+for c in ("blue", "grey", "sage", "rose"): add(f"sofa_{c}", J.sofa(c)); add(f"sofa_{c}_turned", J.sofa(c, turned=True))
+for c in ("rose", "teal", "lavender", "grey"): add(f"armchair_{c}", J.armchair(c)); add(f"armchair_{c}_turned", J.armchair(c, turned=True))
 for n, c in [("oak", hexc("e8d4b8")), ("white", hexc("f2f2f2")), ("walnut", hexc("a9805e"))]: add(f"side_table_{n}", J.side_table(c))
 for n, c in [("cream", hexc("f6e7c8")), ("mint", hexc("cfe7dc")), ("pink", hexc("f4d0d0"))]:
     add(f"table_lamp_{n}", J.table_lamp(c)); add(f"floor_lamp_{n}", J.floor_lamp(c))

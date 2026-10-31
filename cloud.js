@@ -97,7 +97,7 @@ const hasProgress=s=>!!(s.history?.length||s.xp);
 function adoptCloud(remote,etag){
   const mine={};for(const k of DEVICE_KEYS)if(k in state)mine[k]=state[k];
   state=hydrate({...fresh(),...remote,...mine});localStorage.setItem(STORE,JSON.stringify(state));
-  setSync({etag,dirty:false,at:Date.now()});setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);render();
+  setSync({etag,dirty:false,at:Date.now()});applyRoom(performance.now());render();
 }
 // Both copies changed. If one simply contains the other, keep the fuller one; otherwise ask.
 function resolveSync(remote,etag){

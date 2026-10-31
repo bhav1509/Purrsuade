@@ -85,32 +85,49 @@ def teepee(color=hexc("f2d9c4"), trim=hexc("d98f8f")):
         s.line((x * .2, y * .2, 44), (x, y, 54), hexc("9a7656"))
     return s.finish()
 
-def sofa(color="blue"):
-    """2-seat sofa 140 x 80 cm, seat 42 cm, back 80 cm. Long side along x, back against y=0 wall."""
+def _turnable(s, turned, cx, cy):
+    """Box drawer centred on (cx, cy). turned=True swaps the x and y axes: the piece rotated a quarter turn
+    (back against the x=0 wall instead of the y=0 wall). Faces keep their lighting because box() shades by axis."""
+    def box(x, y, z, dx, dy, dz, c):
+        x, y = x - cx, y - cy
+        if turned: s.box(y, x, z, dy, dx, dz, c)
+        else: s.box(x, y, z, dx, dy, dz, c)
+    return box
+
+def sofa(color="blue", turned=False):
+    """2-seat sofa ~110 x 65 cm (70 x 40 u), centred on its floor point. Long side along x, back towards y=0
+    (turned: long side along y, back towards x=0). Drawn far-to-near: the far arm before the seat and cushions,
+    the near arm last, so the arms sit beside the seat instead of over it."""
     main, light = SOFT[color]
-    s = Spr(300, 260, 150, 190)
-    L, D = 88, 50
-    s.box(0, 0, 0, L, D, 6, shade(main, .7))                         # plinth
-    s.box(0, 0, 6, L, 14, 44, main)                                   # backrest
-    s.box(0, 14, 6, L, D - 14, 16, main)                              # seat base
-    s.box(8, 14, 22, (L - 16) / 2 - 1, D - 16, 6, mix(main, light, .35))
-    s.box(L / 2 + 1, 14, 22, (L - 16) / 2 - 1, D - 16, 6, mix(main, light, .35))
-    s.box(8, 6, 22, (L - 16) / 2 - 1, 8, 24, mix(main, light, .25))
-    s.box(L / 2 + 1, 6, 22, (L - 16) / 2 - 1, 8, 24, mix(main, light, .25))
-    s.box(0, 0, 6, 8, D, 28, main)                                    # arms
-    s.box(L - 8, 0, 6, 8, D, 28, main)
+    s = Spr(260, 220, 130, 160)
+    L, D, A = 70, 40, 6                                               # length, depth, arm width
+    box = _turnable(s, turned, L / 2, D / 2)
+    box(0, 0, 0, L, D, 5, shade(main, .7))                            # plinth
+    box(0, 0, 5, L, 11, 35, main)                                     # backrest
+    box(0, 0, 5, A, D, 22, main)                                      # far arm
+    box(A, 11, 5, L - 2 * A, D - 11, 13, main)                        # seat base (between the arms)
+    half = (L - 2 * A) / 2
+    box(A, 5, 18, half - 1, 6, 19, mix(main, light, .25))             # back cushions
+    box(A + half + 1, 5, 18, half - 1, 6, 19, mix(main, light, .25))
+    box(A, 11, 18, half - 1, D - 13, 5, mix(main, light, .35))        # seat cushions
+    box(A + half + 1, 11, 18, half - 1, D - 13, 5, mix(main, light, .35))
+    box(L - A, 0, 5, A, D, 22, main)                                  # near arm
     return s.finish()
 
-def armchair(color="rose"):
+def armchair(color="rose", turned=False):
+    """One-seat version of the sofa, 44 x 40 u, centred on its floor point: the same plinth, full-width back,
+    arms, seat base and cushions, drawn far-to-near the same way. Seat top at z = 23."""
     main, light = SOFT[color]
     s = Spr()
-    W, D = 46, 46
-    s.box(0, 0, 0, W, D, 6, shade(main, .7))
-    s.box(0, 0, 6, W, 12, 42, main)
-    s.box(0, 12, 6, W, D - 12, 16, main)
-    s.box(8, 12, 22, W - 16, D - 14, 6, mix(main, light, .35))
-    s.box(0, 0, 6, 8, D, 26, main)
-    s.box(W - 8, 0, 6, 8, D, 26, main)
+    L, D, A = 44, 40, 6                                               # length, depth, arm width
+    box = _turnable(s, turned, L / 2, D / 2)
+    box(0, 0, 0, L, D, 5, shade(main, .7))                            # plinth
+    box(0, 0, 5, L, 11, 35, main)                                     # backrest
+    box(0, 0, 5, A, D, 22, main)                                      # far arm
+    box(A, 11, 5, L - 2 * A, D - 11, 13, main)                        # seat base (between the arms)
+    box(A, 5, 18, L - 2 * A, 6, 19, mix(main, light, .25))            # back cushion
+    box(A, 11, 18, L - 2 * A, D - 13, 5, mix(main, light, .35))       # seat cushion
+    box(L - A, 0, 5, A, D, 22, main)                                  # near arm
     return s.finish()
 
 def side_table(color=hexc("e8d4b8")):

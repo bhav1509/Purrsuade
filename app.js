@@ -1,6 +1,6 @@
 // Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
-const APP_VERSION='0.2.0';
-const APP_RELEASED='2026-10-22';
+const APP_VERSION='0.3.0';
+const APP_RELEASED='2026-10-31';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
 // Storage keys keep the original name so existing progress carries over after the rename.
@@ -29,13 +29,19 @@ outer: for(const [d,t] of BASE_TOPICS){for(const v of VARIATIONS){TOPICS.push({d
 const SKILLS=['clarity','structure','confidence','vocabulary','conciseness','grammar'];
 const LABEL={clarity:'Clarity',structure:'Structure',confidence:'Confidence',vocabulary:'Vocabulary',conciseness:'Conciseness',grammar:'Grammar',overall:'Overall'};
 
-function fresh(){return {xp:0,coins:80,streak:0,lastDaily:null,duration:2,room:'cream_checker',layout:{},history:[],cat:{name:'Miso',coat:'orange_tabby',hunger:82,thirst:82,cleanliness:82,happiness:82,lastUpdated:Date.now(),zeroSince:null,alive:true,born:today()},graves:[],version:1};}
+function fresh(){return {xp:0,coins:80,streak:0,lastDaily:null,duration:2,room:'cream_checker',layout:{},history:[],cat:{name:'Miso',coat:'orange_tabby',hunger:82,thirst:82,cleanliness:82,happiness:82,lastUpdated:Date.now(),zeroSince:null,alive:true,born:today()},graves:[],owned:{coats:['orange_tabby'],rooms:['cream_checker'],items:[]},decor:{variants:{},extras:[],hidden:[]},version:1};}
 function load(){try{return hydrate({...fresh(),...JSON.parse(localStorage.getItem(STORE)||'{}')});}catch{return fresh();}}
 function hydrate(d){const savedBorn=d.cat?.born;d.cat={...fresh().cat,...(d.cat||{})};d.graves=Array.isArray(d.graves)?d.graves:[];d.history=d.history||[];
   // Cats from before birthdays were tracked: born on the day of the first session (or after the previous cat).
   const firstDay=d.history.map(h=>h.date).sort()[0];
   if(!savedBorn)d.cat.born=d.graves.length?d.graves[d.graves.length-1].died:(firstDay||today());
-  repairGraves(d);d.layout=d.layout&&typeof d.layout==='object'?d.layout:{}; d.coins=Number.isFinite(d.coins)?d.coins:80; return decayCat(d);}
+  repairGraves(d);d.layout=d.layout&&typeof d.layout==='object'?d.layout:{}; d.coins=Number.isFinite(d.coins)?d.coins:80;
+  // Coats and room styles used to be free in Settings: whatever was picked before the shop stays owned.
+  const own=d.owned||{};d.owned={coats:[...new Set([...(own.coats||[]),'orange_tabby',d.cat.coat])],rooms:[...new Set([...(own.rooms||[]),'cream_checker',d.room])],items:Array.isArray(own.items)?own.items:[]};
+  // Perches, water fountains and ottomans left the shop; any already bought are taken out of the room.
+  const retired=/^(perch|fountain|ottoman)_/;d.owned.items=d.owned.items.filter(s=>!retired.test(s));
+  d.decor={variants:{...(d.decor?.variants||{})},extras:Array.isArray(d.decor?.extras)?d.decor.extras.filter(e=>!retired.test(e.sprite)):[],hidden:Array.isArray(d.decor?.hidden)?d.decor.hidden:[]};
+  return decayCat(d);}
 function save(){localStorage.setItem(STORE,JSON.stringify(state));cloudChanged();}
 // The quest in progress is kept under its own key so typing can save it without touching the cat's decay clock.
 const QUEST_STORE=STORE+'-quest';
@@ -94,7 +100,9 @@ function repairGraves(d){
     const until=next?next.born:(d.cat.alive?d.cat.born:today());g.sessions=sessionsBetween(d,g.born,until>g.born?until:g.died);g.repaired=true;});
 }
 function level(){return Math.floor(state.xp/500)+1;}
-function title(){const l=level();return l<=2?'Curious Speaker':l<=4?'Clear Speaker':l<=6?'Confident Communicator':l<=8?'Persuasive Speaker':'Communication Champion';}
+// [first level, title]
+const TITLES=[[1,'Curious Speaker'],[3,'Clear Speaker'],[5,'Confident Communicator'],[7,'Persuasive Speaker'],[9,'Communication Champion']];
+function title(){const l=level();return TITLES.filter(([n])=>l>=n).pop()[1];}
 function prep(){const l=level();return l<=2?60:l<=4?45:30;}
 // Finished sessions only; quests left half-done at midnight sit in the journal as incomplete.
 function sessions(){return state.history.filter(h=>!h.incomplete);}
@@ -111,7 +119,9 @@ function catMood(){const c=state.cat,n=c.name;if(!c.alive)return ['Gone',`${n} i
 function skillAvg(s){const a=sessions().map(h=>+h.scores[s]).filter(Boolean);return a.length?round1(a.reduce((x,y)=>x+y,0)/a.length):0;}
 
 let state=load(), challenge=loadQuest(), toastTimer=null;
-setRoomLayout(state.layout);setRoomGraves(state.graves);
+applyRoom();
+// Hand the room drawing everything it shows from the saved state: bought furniture and colours, layout, headstones.
+function applyRoom(time){setRoomDecor(arrange.pending?{...state.decor,extras:[...state.decor.extras,arrange.pending]}:state.decor);setRoomLayout(state.layout,time);setRoomGraves(state.graves);}
 rolloverQuest();
 // Check again at each local midnight, and whenever the app comes back (timers sleep on phones).
 function newDayCheck(){const r=rolloverQuest();if(r){wheel={rot:wheel.rot,spinning:false};render();toast(r==='saved'?'New day · your unfinished quest was saved to the journal.':'New day · time for a fresh quest.');}}
@@ -132,6 +142,7 @@ function paintIcons(){
   document.querySelectorAll('[data-pixel-icon]').forEach(c=>drawSpriteIcon(c,CARE_ICONS[c.dataset.pixelIcon]));
   document.querySelectorAll('[data-coat] canvas').forEach(c=>drawCatIcon(c,c.parentElement.dataset.coat));
   document.querySelectorAll('[data-room] canvas').forEach(c=>drawRoomIcon(c,c.parentElement.dataset.room));
+  document.querySelectorAll('canvas[data-sprite]').forEach(c=>drawSpriteIcon(c,c.dataset.sprite,true));
 }
 // Keep the room clear of the HUD bands, and out from under an open panel.
 function measureRoomPads(){
@@ -185,7 +196,7 @@ function setPanel(name){
   if(panel===name)name=null;
   if(name!=='quest'&&recActive())stopRecording();
   if(name==='quest')tourEvent('quest');
-  if(name&&arrange.on){arrange.on=false;panel=name;render();return;}
+  if(name&&arrange.on){endArrange();panel=name;render();return;}
   const el=$('.panel'),wasOpen=!!panel;panel=name;
   if(!el){render();return;}
   if(name){el.innerHTML=panelView();bindPanel();paintIcons();paintWheel();fitHistory();}
@@ -199,7 +210,7 @@ function setPanel(name){
 
 const HUD=[['Food','hunger','food','food'],['Water','thirst','water','water'],['Clean','cleanliness','clean','litter'],['Happy','happiness','happy','play']];
 const CARE=[['food','Feed',12],['water','Water',0],['litter','Litter',0],['play','Play',5],['treat','Treat',20]];
-const CARE_ACTIONS={food:{cost:12,key:'hunger',gain:38,msg:n=>`${n} enjoyed the meal.`},water:{cost:0,key:'thirst',gain:45,msg:()=>'Fresh water added.'},litter:{cost:0,key:'cleanliness',gain:48,msg:()=>'Litter box cleaned.'},play:{cost:5,key:'happiness',gain:28,msg:n=>`${n} had fun playing.`},treat:{cost:20,key:'happiness',gain:20,msg:n=>`${n} loved the treat!`}};
+const CARE_ACTIONS={food:{cost:12,key:'hunger',gain:38,msg:n=>`${n} enjoyed the meal.`},water:{cost:0,key:'thirst',gain:45,msg:()=>'Fresh water added.'},litter:{cost:0,key:'cleanliness',gain:48,msg:()=>'Litter box cleaned.'},play:{cost:5,key:'happiness',gain:25,msg:n=>`${n} had fun playing.`},treat:{cost:20,key:'happiness',gain:50,msg:n=>`${n} loved the treat!`}};
 // How much an action would actually add right now (0 when that need is already full).
 const careGain=a=>{const x=CARE_ACTIONS[a];return Math.max(0,Math.round(Math.min(x.gain,100-state.cat[x.key])));};
 // Overall health is the average of the four needs, shown as five hearts (half hearts allowed).
@@ -217,7 +228,7 @@ function gameView(){const c=state.cat,[,msg]=catMood(),health=catHealth(),daily=
       <div class="room-hud">${HUD.map(([l,key,kind,icon])=>{const v=Math.round(c[key]);return `<div class="hud-meter ${kind}${v<35?' low':''}" title="${l} ${v}%"><canvas class="hud-icon" data-pixel-icon="${icon}" width="32" height="32"></canvas><div><span><em>${l}</em><b>${v}%</b></span><div class="bar"><i style="width:${v}%"></i></div></div></div>`;}).join('')}</div>
       <div class="room-status">
         <div class="status-left"><span class="chip hearts${c.alive&&health<25?' danger':''}" role="img" aria-label="Health ${health}%" title="${esc(msg)}">${hearts(health)}</span><button class="chip needs-toggle" data-stats-toggle aria-expanded="${statsOpen}">Needs${HUD.some(h=>c[h[1]]<35)?'<i class="alert-dot" title="A need is low"></i>':''}<i class="caret" aria-hidden="true"></i></button></div>
-        <span class="chip level" title="Level ${level()} · ${title()} · ${state.xp%500}/500 XP to the next level">Lv ${level()}<i class="lv-bar"><b style="width:${(state.xp%500)/5}%"></b></i></span>
+        <button class="chip level" data-level title="Level ${level()} · ${title()} · ${state.xp%500}/500 XP to the next level" aria-label="Level ${level()}: see your progress">Lv ${level()}<i class="lv-bar"><b style="width:${(state.xp%500)/5}%"></b></i></button>
         <span class="chip coins" title="Coins">${COIN}${state.coins}</span>
       </div>
       <nav class="hud-menu" aria-label="Menu">${PANELS.map(([k,icon,l])=>`<button class="hud-btn${panel===k?' active':''}" data-panel="${k}" title="${l}" aria-label="${l}"><i class="px-icon ${icon}" aria-hidden="true"></i><span>${l}</span></button>`).join('')}</nav>
@@ -227,9 +238,10 @@ function gameView(){const c=state.cat,[,msg]=catMood(),health=catHealth(),daily=
         <button class="cam-btn cam-zoom" data-zoom="in" title="Zoom in" aria-label="Zoom in"><i class="px-icon plus" aria-hidden="true"></i></button>
         <button class="cam-btn cam-zoom" data-zoom="out" title="Zoom out" aria-label="Zoom out"><i class="px-icon minus" aria-hidden="true"></i></button>
         <button class="cam-btn cam-arrange${arrange.on?' on':''}" data-arrange title="Move furniture" aria-label="Move furniture" aria-pressed="${arrange.on}"><i class="px-icon move" aria-hidden="true"></i></button>
+        <button class="cam-btn cam-shop${panel==='shop'?' active':''}" data-panel="shop" title="Shop" aria-label="Shop"><i class="px-icon bag" aria-hidden="true"></i></button>
         <button class="cam-btn cam-reset" hidden title="Reset view" aria-label="Reset view"><i class="reset-icon" aria-hidden="true"></i></button>
       </div>
-      ${arrange.on?`<div class="arrange-bar" role="status"><span>Drag things to move them</span><button data-arrange-reset>Reset</button><button class="done" data-arrange>Done</button></div>`
+      ${arrange.on?arrangeBar()
         :`<button class="speak-btn${!daily&&!challenge?' due':''}" data-panel="quest"><i class="px-icon mic" aria-hidden="true"></i>${speak}</button>`}
       <details class="care-menu"${careMenuOpen?' open':''}><summary><i class="hp hp-full" aria-hidden="true"></i>Care</summary><div class="care-menu-list">${CARE.map(careBtn).join('')}</div></details>
     </div>
@@ -238,8 +250,8 @@ function gameView(){const c=state.cat,[,msg]=catMood(),health=catHealth(),daily=
 </div>`;}
 
 function panelView(){
-  const body={quest:questPanel,progress:progressPanel,journal:journalPanel,settings:settingsPanel}[panel]();
-  return `<header class="panel-head"><div class="panel-tabs">${PANELS.map(([k,icon,l])=>`<button class="tab${panel===k?' active':''}" data-panel-tab="${k}" title="${l}" aria-label="${l}"><i class="px-icon ${icon}" aria-hidden="true"></i></button>`).join('')}</div><h2>${PANELS.find(p=>p[0]===panel)[2]}</h2><button class="close" data-panel-close title="Close" aria-label="Close"><i class="px-icon x" aria-hidden="true"></i></button></header><div class="panel-body pb-${panel}">${body}</div>`;
+  const body={quest:questPanel,progress:progressPanel,journal:journalPanel,settings:settingsPanel,shop:shopPanel}[panel]();
+  return `<header class="panel-head"><div class="panel-tabs">${PANELS.map(([k,icon,l])=>`<button class="tab${panel===k?' active':''}" data-panel-tab="${k}" title="${l}" aria-label="${l}"><i class="px-icon ${icon}" aria-hidden="true"></i></button>`).join('')}</div><h2>${[...PANELS,SHOP_PANEL].find(p=>p[0]===panel)[2]}</h2><button class="close" data-panel-close title="Close" aria-label="Close"><i class="px-icon x" aria-hidden="true"></i></button></header><div class="panel-body pb-${panel}">${body}</div>`;
 }
 
 // ---- Quest ----
@@ -625,8 +637,8 @@ function journalPanel(){
   <div class="pager"><button class="secondary" data-hist-page="-1" ${histPage?'':'disabled'}>←</button><span>${histPage+1} / ${pages}</span><button class="secondary" data-hist-page="1" ${histPage<pages-1?'':'disabled'}>→</button></div></div>`;
 }
 function histDetail(h){return `<div class="hist-detail"><div class="detail-head"><button class="mini back" data-hist-back>← All sessions</button><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><h3>${esc(h.topic)}</h3><div class="chips"><b>🎯 ${h.scores.overall||'—'}/10</b><b>⭐ +${h.earnedXP} XP</b><b>${COIN}+${h.earnedCoins}</b><b><i class="px-icon mic light" aria-hidden="true"></i>${h.spokeSec?mmss(h.spokeSec):h.duration+' min'}</b></div><div class="score-chips">${SKILLS.map(s=>`<span>${LABEL[s]} <b>${h.scores[s]||'—'}</b></span>`).join('')}</div></div>${(()=>{const kp=h.keyPoints?.length?h.keyPoints:parseKeyPoints(h.feedback);
-    return kp.length?`<div class="detail-text key-points"><h4>Key points</h4><ul>${kp.map(p=>`<li>${esc(p)}</li>`).join('')}</ul><details><summary>Full AI feedback</summary><p class="pre">${esc(h.feedback)}</p></details></div>`
-      :`<div class="detail-text"><h4>AI feedback</h4><p class="pre">${esc(h.feedback||'No feedback saved.')}</p></div>`;})()}<div class="detail-text"><h4>Transcript</h4><p class="pre">${esc(h.transcript||'No transcript saved.')}</p></div></div>`;}
+    return kp.length?`<div class="detail-text key-points"><h4>Key points</h4><ul>${kp.map(p=>`<li>${esc(p)}</li>`).join('')}</ul><details><summary>Full AI feedback</summary><div class="fb">${feedbackHtml(h.feedback)}</div></details></div>`
+      :`<div class="detail-text"><h4>AI feedback</h4>${h.feedback?`<div class="fb">${feedbackHtml(h.feedback)}</div>`:'<p class="pre">No feedback saved.</p>'}</div>`;})()}<div class="detail-text"><h4>Transcript</h4><p class="pre">${esc(h.transcript||'No transcript saved.')}</p></div></div>`;}
 // This month at a glance: days with a completed daily quest are filled in.
 function monthCalendar(){
   const now=new Date(),y=now.getFullYear(),m=now.getMonth(),days=new Date(y,m+1,0).getDate(),lead=(new Date(y,m,1).getDay()+6)%7;
@@ -640,12 +652,194 @@ function monthCalendar(){
 // Rows have a fixed height, so the page size is however many fit in the list.
 function fitHistory(){const box=$('.hist-rows');if(!box)return;const per=Math.max(1,Math.floor((box.clientHeight+6)/64));if(per!==histPer){histPer=per;$('.panel').innerHTML=panelView();bindPanel();}}
 
+// ---- Shop: new furniture, new colours for what's in the room, room styles, coats and a new name ----
+const SHOP_PANEL=['shop','bag','Shop'];
+// Aisles of [name, price, sprites…]: each colour is bought once, then can be put away and placed again.
+const SHOP_FURNITURE=[
+  ['Cat stuff',[['Cat tree',200,'cat_tree_mint','cat_tree_lilac','cat_tree_white'],['Cat condo',180,'condo_cream','condo_oak'],
+    ['Teepee',140,'teepee_cream_rose','teepee_grey_mint','teepee_white_blue'],['Cat bed',90,'bed_rose','bed_sage','bed_blue','bed_lavender','bed_teal','bed_grey'],
+    ['Scratcher',70,'scratcher_rose','scratcher_sage','scratcher_blue'],['Tunnel',80,'tunnel_pink','tunnel_green','tunnel_blue'],['Cardboard box',25,'cardboard_box']]],
+  ['Seats & rugs',[['Sofa',240,'sofa_rose','sofa_sage','sofa_blue','sofa_grey'],['Armchair',160,'armchair_lavender','armchair_rose','armchair_teal','armchair_grey'],
+    ['Stool',50,'stool_lilac','stool_blue','stool_cream','stool_grey'],['Rug',60,'rug_rose','rug_blue','rug_sage'],['Blanket',45,'blanket_rose','blanket_sage','blanket_blue','blanket_lavender']]],
+  ['Decor',[['Bookshelf',170,'bookshelf_full_oak','bookshelf_full_walnut','bookshelf_full_white'],['Aquarium',260,'aquarium_oak','aquarium_white'],
+    ['Side table',60,'side_table_oak','side_table_walnut','side_table_white'],['Big plant',70,'plant_big_mauve','plant_big_navy','plant_big_taupe','plant_big_sky'],
+    ['Floor lamp',90,'floor_lamp_mint','floor_lamp_pink','floor_lamp_cream']]],
+  ['Small things',[['Small plant',35,'plant_small_blush','plant_small_butter','plant_small_sky','plant_small_white'],['Cactus',30,'cactus_terracotta','cactus_blue','cactus_white'],
+    ['Book stack',25,'book_stack'],['Ball',15,'toy_ball_pink','toy_ball_blue','toy_ball_green','toy_ball_yellow'],['Toy mouse',15,'toy_mouse_grey','toy_mouse_brown'],
+    ['Toy fish',15,'toy_fish_pastel','toy_fish_ocean','toy_fish_leaf'],['Feather wand',15,'toy_feather_wand_pink','toy_feather_wand_teal','toy_feather_wand_yellow'],
+    ['Yarn ball',15,'toy_yarn_blue','toy_yarn_green','toy_yarn_yellow']]],
+];
+const SHOP_ITEMS=SHOP_FURNITURE.flatMap(([,items])=>items);
+// [room item, name, price, colours]: the first colour is the one the room comes with.
+const SHOP_COLOURS=[
+  ['rug','Rug',40,['rug_sage','rug_blue','rug_rose']],['bed','Bed',40,['basket_bed_sage','basket_bed_blue','basket_bed_rose']],
+  ['cushion','Floor cushion',30,['floor_cushion_lavender','floor_cushion_blue','floor_cushion_grey','floor_cushion_rose','floor_cushion_sage','floor_cushion_teal']],
+  ['plant','Plant',30,['plant_big_sky','plant_big_mauve','plant_big_navy','plant_big_taupe']],['lamp','Lamp',30,['floor_lamp_cream','floor_lamp_mint','floor_lamp_pink']],
+  ['shelf','Shelf',40,['shelf_sage','shelf_lilac','shelf_peach','shelf_sky']],['post','Scratching post',25,['scratch_post_oak','scratch_post_cream']],
+  ['litter','Litter tray',25,['litter_tray_mint','litter_tray_grey','litter_tray_lilac','litter_tray_pink']],
+  ['food','Food bowl',20,['bowl_sky_kibble','bowl_blush_kibble','bowl_butter_kibble','bowl_lilac_kibble','bowl_mint_kibble','bowl_white_kibble']],
+  ['water','Water bowl',20,['bowl_blush_water','bowl_sky_water','bowl_butter_water','bowl_lilac_water','bowl_mint_water','bowl_white_water']],
+  ['yarn','Yarn ball',15,['toy_yarn_pink','toy_yarn_blue','toy_yarn_green','toy_yarn_yellow']],
+];
+// Colour dots for each colour name the sprites end in (kibble and water bowls are named by the bowl colour).
+const SWATCH={rose:'#d99a9c',sage:'#9cbf8e',blue:'#8fb2d9',grey:'#a9acb3',lavender:'#a99cc6',teal:'#5f9ea0',mint:'#a9dcc6',lilac:'#c4b8e6',white:'#f2f0ea',
+  cream:'#efe3cf',oak:'#c9a07a',walnut:'#8a6446',pink:'#e9a0b4',green:'#8cc9a2',yellow:'#ead27a',sky:'#9cc4e4',blush:'#f2c9c9',butter:'#f3e3a6',mauve:'#a98aa6',
+  navy:'#3b4466',taupe:'#8a7a72',terracotta:'#c9775a',brown:'#b98a6a',pastel:'#f2b8c6',ocean:'#6f9ac4',leaf:'#9cbf8e',peach:'#f6c9a4'};
+const colourOf=sp=>{const p=sp.replace(/_(kibble|water)$/,'').split('_');return p[0]==='bowl'?p[1]:p.pop();};
+const COAT_PRICE=100,ROOM_PRICE=150,RENAME_PRICE=40;
+let shopTab='furniture',shopAisle=SHOP_FURNITURE[0][0];
+// The colour shown on each product card: picked with its colour dots, otherwise the one in use or owned.
+const shopPick={};
+// "Teepee (rose)", "Feather wand (teal)", "Cardboard box".
+function furnitureName(sp){const [label,,...sprites]=SHOP_ITEMS.find(g=>g.includes(sp));return sprites.length<2?label:`${label} (${colourOf(sp)})`;}
+const priceTag=(price,owned,status)=>status?`<em class="using">${status}</em>`:owned?'<em>Owned</em>':`<em class="${state.coins<price?'short':''}">${COIN}${price}</em>`;
+function shopPanel(){
+  const tabs=[['furniture','Furniture'],['colours','Colours'],['room','Room'],['cat','Cat']];
+  return `<div class="shop"><div class="shop-head"><span>Your coins</span><b>${COIN}${state.coins}</b></div>
+  <div class="shop-tabs" role="tablist">${tabs.map(([k,l])=>`<button role="tab" aria-selected="${shopTab===k}" class="${shopTab===k?'active':''}" data-shop-tab="${k}">${l}</button>`).join('')}</div>
+  ${{furniture:shopFurniture,colours:shopColours,room:shopRooms,cat:shopCat}[shopTab]()}</div>`;
+}
+// A product card: the picked colour large, its colour dots (a mint corner on owned ones) and one button for what
+// to do; a mint frame marks what's in the room.
+function shopCard(key,label,sprites,pick,action,{status='',owns=()=>false}={}){
+  return `<article class="shop-card${status?' '+status:''}"><canvas data-sprite="${pick}" width="144" height="120"></canvas><b>${label}</b>
+    ${sprites.length>1?`<div class="swatches">${sprites.map(sp=>`<button class="swatch${sp===pick?' on':''}${owns(sp)?' own':''}" style="--c:${SWATCH[colourOf(sp)]||'#ccc'}" data-swatch="${key}" data-colour="${sp}" title="${cap(colourOf(sp))}" aria-label="${cap(colourOf(sp))}"></button>`).join('')}</div>`:''}
+    ${action}</article>`;
+}
+function shopFurniture(){
+  const placed=new Set(state.decor.extras.map(e=>e.sprite)),own=sp=>state.owned.items.includes(sp);
+  const aisles=[...SHOP_FURNITURE.map(([a])=>a),'Yours'];
+  const chips=`<div class="shop-aisles">${aisles.map(a=>`<button class="${shopAisle===a?'active':''}" data-aisle="${a}">${a}</button>`).join('')}</div>`;
+  if(shopAisle==='Yours'){
+    const mine=SHOP_ITEMS.flatMap(([,,...sprites])=>sprites).filter(own),stored=[...ROOM_ITEMS,...WALL_ITEMS].filter(it=>state.decor.hidden.includes(it.id));
+    return chips+`<p class="muted small">Everything you’ve bought, and what you’ve put away from the room. Tap to put it away or bring it back; both are free.</p>`
+      +(mine.length||stored.length?`<div class="shop-grid">${[
+        ...mine.map(sp=>shopCard(sp,furnitureName(sp),[sp],sp,`<button class="shop-act" data-buy-item="${sp}">${placed.has(sp)?'Put away':'Place in room'}</button>`,{status:placed.has(sp)?'using':'owned'})),
+        ...stored.map(it=>{const sp=it.base?`${it.base}_left`:state.decor.variants[it.id]||it.sprite;return shopCard(it.id,it.name,[sp],sp,`<button class="shop-act" data-restore="${it.id}">Bring back</button>`,{status:'owned'});})].join('')}</div>`
+        :'<p class="empty-note">Nothing yet. Things you buy, and anything you put away in Move furniture, show up here.</p>');
+  }
+  const items=SHOP_FURNITURE.find(([a])=>a===shopAisle)[1];
+  return chips+`<p class="muted small">${shopAisle==='Small things'?'Small things can stand on the floor, a shelf (also inside its racks) or a side table.':`New things for ${esc(state.cat.name)}’s room. After buying, drag it where you like.`}</p>
+    <div class="shop-grid">${items.map(([label,price,...sprites])=>{
+      const pick=shopPick[label]||sprites.find(sp=>placed.has(sp))||sprites.find(own)||sprites[0],has=own(pick),here=placed.has(pick);
+      const act=here?`<button class="shop-act" data-buy-item="${pick}">Put away</button>`:has?`<button class="shop-act" data-buy-item="${pick}">Place in room</button>`
+        :`<button class="shop-act buy${state.coins<price?' short':''}" data-buy-item="${pick}">Buy · ${COIN}${price}</button>`;
+      return shopCard(label,label,sprites,pick,act,{status:here?'using':has?'owned':'',owns:own});}).join('')}</div>`;
+}
+function shopColours(){
+  return '<p class="muted small">New colours for what came with the room. Buy a colour once, switch any time.</p><div class="shop-grid">'
+    +SHOP_COLOURS.map(([id,label,price,sprites])=>{const cur=state.decor.variants[id]||sprites[0],pick=shopPick['c:'+id]||cur,has=pick===sprites[0]||state.owned.items.includes(`${id}:${pick}`);
+      const act=pick===cur?'<button class="shop-act" disabled>In use</button>':has?`<button class="shop-act" data-recolour="${id}" data-colour="${pick}">Use this colour</button>`
+        :`<button class="shop-act buy${state.coins<price?' short':''}" data-recolour="${id}" data-colour="${pick}">Buy · ${COIN}${price}</button>`;
+      return shopCard('c:'+id,label,sprites,pick,act,{status:pick===cur?'using':'',owns:sp=>sp===sprites[0]||state.owned.items.includes(`${id}:${sp}`)});}).join('')+'</div>';
+}
+// Re-draw the open panel in place, keeping where it was scrolled to.
+function refreshPanel(){const el=$('.panel'),top=$('.panel-body')?.scrollTop||0;if(!el||!panel)return;el.innerHTML=panelView();bindPanel();paintIcons();const b=$('.panel-body');if(b)b.scrollTop=top;}
+function shopRooms(){
+  return `<p class="muted small">Room styles · ${COIN}${ROOM_PRICE} each. Buy once, switch any time.</p><div class="room-grid shop-rooms">${ROOM_STYLES.map(k=>{const own=state.owned.rooms.includes(k);
+    return `<button data-room="${k}" data-buy-room="${k}" class="${state.room===k?'active':''}"><canvas width="112" height="100"></canvas><span>${cap(k.replace('_',' '))}</span>${priceTag(ROOM_PRICE,own,state.room===k&&'In use')}</button>`;}).join('')}</div>`;
+}
+function shopCat(){const c=state.cat;return `
+  <section class="p-card"><h3>Name</h3><p class="muted small">A new name for ${esc(c.name)} costs ${COIN}${RENAME_PRICE}.</p>
+    <div class="name-row"><input id="cat-name" maxlength="18" value="${esc(c.name)}" placeholder="Cat name"><button class="secondary" id="rename-cat">Rename</button></div></section>
+  <section class="p-card"><h3>Coat</h3><p class="muted small">${COIN}${COAT_PRICE} each. Buy a coat once, switch any time.</p>
+    <div class="coat-grid shop-coats">${CAT_COATS.map(k=>{const own=state.owned.coats.includes(k);
+      return `<button data-coat="${k}" data-buy-coat="${k}" class="${c.coat===k?'active':''}" title="${cap(k.replace('_',' '))}"><canvas width="64" height="64"></canvas>${priceTag(COAT_PRICE,own,c.coat===k&&'In use')}</button>`;}).join('')}</div></section>`;}
+// The game's own pixel dialog for a yes/no question (with a picture of the item); resolves true on OK.
+function ask({title,body,ok,cancel='Cancel',sprite}){return new Promise(done=>{
+  showModal(`<h3>${title}</h3>${sprite?`<canvas class="ask-thumb" data-sprite="${sprite}" width="192" height="160"></canvas>`:''}<p>${body}</p>
+    <div class="modal-foot"><button class="modal-later" data-no>${cancel}</button>${ok?`<button class="modal-ok" data-yes>${ok}</button>`:''}</div>`,
+    sh=>{const end=v=>{closeModal();done(v);};sh.querySelector('[data-no]').onclick=()=>end(false);sh.querySelector('[data-yes]')?.addEventListener('click',()=>end(true));});});}
+// Ask before spending; false if there aren't enough coins or the user says no.
+async function pay(price,what,sprite){
+  if(state.coins<price){await ask({title:'Not enough coins',body:`${cap(what)} costs ${COIN}${price} and you have ${COIN}${state.coins}. Speaking quests earn coins.`,cancel:'OK',sprite});return false;}
+  if(!await ask({title:`Buy ${what}?`,body:`You have ${COIN}${state.coins}.`,ok:`Buy · ${COIN}${price}`,sprite}))return false;
+  state.coins-=price;return true;
+}
+async function buyFurniture(sp){
+  const [,price]=SHOP_ITEMS.find(g=>g.includes(sp)),name=furnitureName(sp),placed=state.decor.extras.find(e=>e.sprite===sp),own=state.owned.items.includes(sp);
+  if(placed){if(await ask({title:`Put the ${name.toLowerCase()} away?`,body:'You can bring it back any time for free.',ok:'Put away',sprite:sp})){
+    putAway(placed.id);refreshPanel();toast(`${name} put away.`);}return;}
+  const [x,y]=findFreeSpot(sp),piece={id:'x'+Date.now().toString(36),sprite:sp,x,y};
+  arrange.on=true;arrange.sel=piece.id;panel=null;
+  if(own){state.decor.extras.push(piece);applyRoom(performance.now());persist();toast(`${name} is back. Drag it where you like, then tap Done.`);return;}
+  // Not bought yet: it goes into the room to be placed (and turned) first; the Buy button is in the arrange bar.
+  arrange.pending={...piece,price,name};applyRoom(performance.now());render();
+  toast(`Drag the ${name.toLowerCase()} into place, then tap Buy.`);
+}
+async function buyPending(){
+  const pc=arrange.pending;if(!pc)return;const it=roomItems.find(i=>i.id===pc.id),[x,y]=itemPos(it);
+  if(!hostOf(it)&&!placementOk(pc.id,x,y)){toast('Move it to a clear spot first.');return;}
+  if(!await pay(pc.price,`the ${pc.name.toLowerCase()}`,pc.turned?pc.sprite+'_turned':pc.sprite))return;
+  const {price,name,...piece}=pc;state.owned.items.push(pc.sprite);state.decor.extras.push(piece);
+  arrange.pending=null;arrange.on=false;arrange.sel=null;applyRoom(performance.now());persist();cloudSyncSoon();
+  toast(`New ${name.toLowerCase()} for ${state.cat.name}!`);
+}
+// What's in the room under an id: a bought piece, a built-in piece or a wall item, with the name to show.
+function roomPiece(id){
+  const ex=state.decor.extras.find(e=>e.id===id);if(ex)return {id,name:furnitureName(ex.sprite)};
+  const it=roomItems.find(i=>i.id===id)||wallItems.find(w=>w.id===id);return it&&{id,name:it.name,keep:it.keep};
+}
+// Put a piece away: bought ones go back to the shop, built-in ones to the shop's "Put away" row. Whatever stood
+// on it (a plant on a shelf) moves down to the floor.
+function putAway(id){
+  for(const [k,l] of Object.entries(state.layout))if(l?.[0]==='on'&&l[1]===id){delete state.layout[k];const o=state.decor.extras.find(e=>e.id===k);if(o)[o.x,o.y]=findFreeSpot(o.sprite);}
+  const ex=state.decor.extras.find(e=>e.id===id);
+  if(ex){state.decor.extras=state.decor.extras.filter(e=>e!==ex);delete state.layout[id];}else if(!state.decor.hidden.includes(id))state.decor.hidden.push(id);
+  if(arrange.sel===id)arrange.sel=null;
+  applyRoom(performance.now());save();
+}
+// Bring a built-in piece back to where it stood, or the clearest spot if something else is there now.
+function restoreItem(id){
+  state.decor.hidden=state.decor.hidden.filter(h=>h!==id);applyRoom();
+  const it=roomItems.find(i=>i.id===id);
+  if(it&&!it.flat){const [x,y]=itemPos(it);if(!placementOk(id,x,y))state.layout[id]=findFreeSpot(it.base,it.turned);}
+  if(!it){const spot=findWallSpot(id);if(spot)state.layout[id]=spot;}
+  arrange.on=true;arrange.sel=id;panel=null;applyRoom(performance.now());persist();
+  toast(`${roomPiece(id).name} is back. Drag it where you like, then tap Done.`);
+}
+function cancelPending(){const pc=arrange.pending;if(!pc)return;arrange.pending=null;delete state.layout[pc.id];applyRoom(performance.now());}
+function endArrange(){cancelPending();arrange.on=false;arrange.sel=null;}
+// A quarter turn for the selected sofa / armchair, if there's room for it where it stands.
+function turnPiece(){
+  const id=arrange.sel,pc=arrange.pending?.id===id?arrange.pending:state.decor.extras.find(e=>e.id===id);if(!pc||!canTurn(pc.sprite))return;
+  const [x,y]=state.layout[id]||[pc.x,pc.y];
+  if(!placementOk(id,x,y,!pc.turned)){toast('No room to turn it here. Move it somewhere clearer first.');return;}
+  pc.turned=!pc.turned;applyRoom(performance.now());if(pc!==arrange.pending)save();
+}
+// Bottom bar in arrange mode: placing a new piece (Turn / Cancel / Buy), moving the picked piece (Turn / Put away
+// / Done), or nothing picked (Reset / Done).
+function arrangeBar(){
+  const pc=arrange.pending,sel=pc?.id===arrange.sel?pc:state.decor.extras.find(e=>e.id===arrange.sel),turn=sel&&canTurn(sel.sprite)?'<button data-turn>↻ Turn</button>':'';
+  const picked=!pc&&arrange.sel&&roomPiece(arrange.sel);
+  return pc?`<div class="arrange-bar" role="status"><span>Place the ${esc(pc.name.toLowerCase())}</span>${turn}<button data-place-cancel>Cancel</button><button class="done" data-place-buy>Buy · ${COIN}${pc.price}</button></div>`
+    :picked?`<div class="arrange-bar" role="status"><span>${esc(picked.name)}</span>${turn}${picked.keep?'':'<button data-put-away>Put away</button>'}<button class="done" data-arrange>Done</button></div>`
+    :`<div class="arrange-bar" role="status"><span>Drag things to move them</span><button data-arrange-reset>Reset</button><button class="done" data-arrange>Done</button></div>`;
+}
+function refreshArrangeBar(){const bar=$('.arrange-bar');if(!bar)return;bar.outerHTML=arrangeBar();bindArrangeBar();}
+function bindArrangeBar(){
+  document.querySelectorAll('[data-arrange]').forEach(b=>b.onclick=()=>{if(arrange.on)endArrange();else{arrange.on=true;if(panel)setPanel(null);}render();});
+  $('[data-turn]')?.addEventListener('click',turnPiece);
+  $('[data-place-cancel]')?.addEventListener('click',()=>{endArrange();render();});
+  $('[data-place-buy]')?.addEventListener('click',buyPending);
+  $('[data-put-away]')?.addEventListener('click',()=>{const p=roomPiece(arrange.sel);if(!p)return;putAway(p.id);refreshArrangeBar();toast(`${p.name} put away. Bring it back from the shop any time.`);});
+  // Back to the original spots; bought pieces go to the clearest free spots around them.
+  $('[data-arrange-reset]')?.addEventListener('click',()=>{
+    state.layout={};const extras=state.decor.extras;state.decor.extras=[];applyRoom();
+    for(const e of extras){[e.x,e.y]=findFreeSpot(e.sprite,e.turned);state.decor.extras.push(e);applyRoom();}
+    applyRoom(performance.now());save();render();toast('Furniture back in its original spots.');});
+}
+async function recolour(id,sp){
+  const [,label,price,sprites]=SHOP_COLOURS.find(r=>r[0]===id),own=sp===sprites[0]||state.owned.items.includes(`${id}:${sp}`);
+  if((state.decor.variants[id]||sprites[0])===sp)return;
+  if(!own){if(!await pay(price,`a new colour for the ${label.toLowerCase()}`,sp))return;state.owned.items.push(`${id}:${sp}`);}
+  if(sp===sprites[0])delete state.decor.variants[id];else state.decor.variants[id]=sp;
+  applyRoom();save();refreshPanel();toast(`${label} changed.`);
+}
+
 // ---- Settings ----
-function settingsPanel(){const c=state.cat;return `
+function settingsPanel(){return `
   ${accountCard()}
-  <section class="p-card"><h3>Your cat</h3><div class="name-row"><input id="cat-name" maxlength="18" value="${esc(c.name)}" placeholder="Cat name"><button class="secondary" id="save-cat-name">Save</button></div>
-    <div class="coat-grid">${CAT_COATS.map(k=>`<button data-coat="${k}" class="${(c.coat||'')===k?'active':''}" title="${cap(k.replace('_',' '))}" aria-label="${cap(k.replace('_',' '))}"><canvas width="64" height="64"></canvas></button>`).join('')}</div></section>
-  <section class="p-card"><h3>Room style</h3><div class="room-grid">${ROOM_STYLES.map(k=>`<button data-room="${k}" class="${state.room===k?'active':''}"><canvas width="112" height="100"></canvas><span>${cap(k.replace('_',' '))}</span></button>`).join('')}</div></section>
   <section class="p-card"><h3>Instant feedback</h3><p class="muted small">Use your own <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic API key</a> for unlimited instant feedback, billed to your Anthropic account (well under 1 US cent each). It is kept only on this device and sent only to Anthropic.</p>
     ${aiKey()?`<div class="settings"><p class="muted small">Key saved: <b>sk-ant-…${esc(aiKey().slice(-4))}</b></p><button class="secondary" id="ai-key-remove">Remove key</button></div>`
       :'<div class="name-row"><input id="ai-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"><button class="secondary" id="ai-key-save">Save</button></div>'}</section>
@@ -687,10 +881,10 @@ function installCard(){
 function bind(){
   document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>setPanel(b.dataset.panel));
   document.querySelectorAll('[data-care]').forEach(b=>b.onclick=()=>care(b.dataset.care));
-  document.querySelectorAll('[data-arrange]').forEach(b=>b.onclick=()=>{arrange.on=!arrange.on;if(arrange.on&&panel)setPanel(null);render();});
-  $('[data-arrange-reset]')?.addEventListener('click',()=>{state.layout={};setRoomLayout({},performance.now());save();render();toast('Furniture back in its original spots.');});
+  bindArrangeBar();
   $('.care-menu')?.addEventListener('toggle',e=>{careMenuOpen=e.target.open;});
   $('[data-stats-toggle]')?.addEventListener('click',()=>setStatsOpen(!statsOpen));
+  $('[data-level]')?.addEventListener('click',showLevel);
   const room=$('#room-canvas');
   if(room){
     let lastPet=0;
@@ -701,7 +895,7 @@ function bind(){
       if(now-lastPet<400){focusCat(room,{instant:reducedMotion(),onChange:redrawStill});lastPet=0;return;}
       lastPet=now;catReaction={type:'pet',started:now};floatGain('♥','pet');tourEvent('pet');};
     // Arrange mode: presses on furniture drag it instead of panning; the layout is saved on drop.
-    const grab=e=>arrange.on?grabItem(room,e,{onMove:redrawStill,onDrop:layout=>{state.layout=layout;setRoomLayout(layout,performance.now());save();}}):null;
+    const grab=e=>arrange.on?grabItem(room,e,{onMove:redrawStill,onDrop:layout=>{state.layout=layout;setRoomLayout(layout,performance.now());save();refreshArrangeBar();}}):null;
     enableRoomCamera(room,{grab,pinch:matchMedia('(pointer: coarse)').matches,onTap:e=>{if(arrange.on)return;const g=graveAt(room,e.clientX,e.clientY);if(g){showGrave(g);return;}pet(e);},resetButton:$('.cam-reset'),zoomIn:$('[data-zoom="in"]'),zoomOut:$('[data-zoom="out"]'),onChange:redrawStill});
   }
   bindPanel();
@@ -738,8 +932,19 @@ function bindPanel(){
   qa('[data-score]').forEach(i=>i.oninput=e=>{challenge.scores[e.target.dataset.score]=+e.target.value;saveQuest();const st=$('#score-status');if(st)st.textContent=scoreStatus();});
   qa('[data-self]').forEach(i=>i.oninput=e=>{challenge.self[e.target.dataset.self]=+e.target.value;saveQuest();e.target.previousElementSibling.querySelector('b').textContent=e.target.value+'/10';});
   q('#complete')?.addEventListener('click',()=>completeQuest(false));
-  qa('[data-coat]').forEach(b=>b.onclick=()=>{state.cat.coat=b.dataset.coat;persist();});
-  qa('[data-room]').forEach(b=>b.onclick=()=>{state.room=b.dataset.room;persist();});
+  qa('[data-shop-tab]').forEach(b=>b.onclick=()=>{shopTab=b.dataset.shopTab;render();});
+  qa('[data-buy-item]').forEach(b=>b.onclick=()=>buyFurniture(b.dataset.buyItem));
+  qa('[data-restore]').forEach(b=>b.onclick=()=>restoreItem(b.dataset.restore));
+  qa('[data-aisle]').forEach(b=>b.onclick=()=>{shopAisle=b.dataset.aisle;refreshPanel();$('.panel-body').scrollTop=0;});
+  qa('[data-swatch]').forEach(b=>b.onclick=()=>{shopPick[b.dataset.swatch]=b.dataset.colour;refreshPanel();});
+  qa('[data-recolour]').forEach(b=>b.onclick=()=>recolour(b.dataset.recolour,b.dataset.colour));
+  qa('[data-buy-room]').forEach(b=>b.onclick=async()=>{const k=b.dataset.buyRoom;if(state.room===k)return;
+    if(!state.owned.rooms.includes(k)){if(!await pay(ROOM_PRICE,`the ${cap(k.replace('_',' '))} room`))return;state.owned.rooms.push(k);}state.room=k;persist();});
+  qa('[data-buy-coat]').forEach(b=>b.onclick=async()=>{const k=b.dataset.buyCoat;if(state.cat.coat===k)return;
+    if(!state.owned.coats.includes(k)){if(!await pay(COAT_PRICE,`the ${cap(k.replace('_',' '))} coat`))return;state.owned.coats.push(k);}state.cat.coat=k;persist();});
+  q('#rename-cat')?.addEventListener('click',async()=>{const n=$('#cat-name').value.trim().slice(0,18),old=state.cat.name;
+    if(!n){toast('Type a new name first.');return;}if(n===old){toast(`${old} already has that name.`);return;}
+    if(!await pay(RENAME_PRICE,`the name “${n}”`))return;state.cat.name=n;persist();toast(`${old} is now ${n}!`);});
   q('#install-app')?.addEventListener('click',async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice.catch(()=>{});installPrompt=null;render();});
   q('#replay-tour')?.addEventListener('click',()=>startTour());
   q('#send-feedback')?.addEventListener('click',()=>{
@@ -751,9 +956,8 @@ function bindPanel(){
   qa('[data-skip]').forEach(b=>b.onclick=()=>cqSkip(+b.dataset.skip));
   qa('[data-transcriber]').forEach(b=>b.onclick=()=>{state.transcriber=b.dataset.transcriber;persist();});
   q('#whisper-prep')?.addEventListener('click',e=>prepareWhisper(e.currentTarget));
-  q('#save-cat-name')?.addEventListener('click',()=>{const n=$('#cat-name').value.trim().slice(0,18);if(!n){toast('Give your cat a name first.');return;}state.cat.name=n;persist();toast(`${n} has a new name!`);});
   q('#export')?.addEventListener('click',exportData);q('#import')?.addEventListener('click',()=>$('#import-file').click());
-  q('#reset')?.addEventListener('click',()=>{if(confirm(`Reset Purrsuade and your cat?${signedIn()?' This also resets the progress in your account.':''} This cannot be undone unless you exported a backup.`)){localStorage.removeItem(STORE);localStorage.removeItem(QUEST_STORE);state=fresh();save();cloudSyncSoon();setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);panel=null;challenge=null;render();}});
+  q('#reset')?.addEventListener('click',()=>{if(confirm(`Reset Purrsuade and your cat?${signedIn()?' This also resets the progress in your account.':''} This cannot be undone unless you exported a backup.`)){localStorage.removeItem(STORE);localStorage.removeItem(QUEST_STORE);state=fresh();save();cloudSyncSoon();applyRoom(performance.now());panel=null;challenge=null;render();}});
 }
 async function copyPrompt(){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}const prompt=coachPrompt();try{await navigator.clipboard.writeText(prompt);toast('Copied · paste it into your AI');}catch{promptFallback(prompt);}}
 function promptFallback(t,quiet){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();if(!quiet)toast('Coach prompt copied.');}
@@ -771,7 +975,7 @@ function flagField(step,selector,msg){
 function completeQuest(skipFeedback){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!skipFeedback&&!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const lvBefore=level(),topBefore=difficulty(),daily=state.lastDaily!==today();let xp=daily?100:35;xp+=(skipFeedback?10:25+10)+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;if(skipFeedback)done.noFeedback=true;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();cloudSyncSoon();showResult(entry,lvBefore,topBefore);}
 function care(a){const c=state.cat;if(!c.alive){toast(`${c.name} cannot be cared for in this state.`);return;}const x=CARE_ACTIONS[a];if(!careGain(a)){toast(`${HUD.find(h=>h[1]===x.key)[0]} is already full.`);return;}if(state.coins<x.cost){toast('Not enough coins. Complete a speaking quest.');return;}state.coins-=x.cost;const before=c[x.key];c[x.key]=clamp(c[x.key]+x.gain,0,100);if(a==='food')c.happiness=clamp(c.happiness+5,0,100);if(a==='litter')c.happiness=clamp(c.happiness+4,0,100);if(healthOf(c)>=5)c.zeroSince=null;catReaction={type:a,started:performance.now()};persist();tourEvent('care');toast(x.msg(c.name));floatGain(`+${Math.round(c[x.key]-before)} ${HUD.find(h=>h[1]===x.key)[0]}`,a);}
 function exportData(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`purrsuade-backup-${today()}.json`;a.click();URL.revokeObjectURL(url);state.lastBackup=Date.now();save();toast('Backup exported.');}
-$('#import-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.history||!d.cat)throw new Error();state=hydrate({...fresh(),...d});setRoomLayout(state.layout,performance.now());setRoomGraves(state.graves);save();cloudSyncSoon();panel=null;challenge=null;render();toast('Backup restored.');}catch{toast('That backup file is not valid.');}};r.readAsText(f);e.target.value='';});
+$('#import-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.history||!d.cat)throw new Error();state=hydrate({...fresh(),...d});applyRoom(performance.now());save();cloudSyncSoon();panel=null;challenge=null;render();toast('Backup restored.');}catch{toast('That backup file is not valid.');}};r.readAsText(f);e.target.value='';});
 
 if('serviceWorker' in navigator && location.protocol!=='file:')window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 // ---- First-run tour: spotlight each control; some steps wait for the user to try it ----
@@ -790,14 +994,14 @@ const TOUR=[
   {target:()=>$('.coins'),title:'Coins',body:()=>`You earn coins by speaking, and spend them on food, toys and treats.`},
   {target:careArea,title:'Look after them',body:()=>`Open <b>Care</b> and give ${esc(state.cat.name)} some water. It’s free!`,wait:'care',
     after:{target:careArea,body:()=>`Nice! Water and litter are free. Food, play and treats cost coins, which you earn by speaking.`}},
-  {target:()=>$('.cam-arrange'),title:'Make it yours',body:()=>`Tap here any time to move the furniture around the room.`},
+  {target:()=>$('.cam-arrange'),title:'Make it yours',body:()=>`Tap here any time to move the furniture around the room. The bag next to it is the shop: new furniture, colours, room styles and coats.`},
   {target:()=>$('.hud-menu'),title:'Menu',body:()=>`Your quests, progress, journal and settings live here.`},
   {target:()=>$('.speak-btn'),title:'Your first quest',body:()=>`Ready? Tap <b>Speak</b> to spin a topic and practise for a couple of minutes.`,wait:'quest'},
 ];
 let tour=null;
 function startTour(){
   // Start from a clean room: close the panel, any dialog, arrange mode and the Needs / Care dropdowns.
-  closeModal();if(panel)setPanel(null);arrange.on=false;careMenuOpen=false;if(statsOpen)setStatsOpen(false);render();
+  closeModal();if(panel)setPanel(null);endArrange();careMenuOpen=false;if(statsOpen)setStatsOpen(false);render();
   document.querySelectorAll('.tour-shade,.tour-card').forEach(e=>e.remove());
   const shade=document.createElement('div'),card=document.createElement('div');shade.className='tour-shade';card.className='tour-card';card.setAttribute('role','dialog');
   document.body.append(shade,card);tour={i:-1,shade,card,frame:0};tourGo(1);
@@ -841,23 +1045,55 @@ addEventListener('keydown',e=>{if(e.key==='Escape'&&tour)endTour(false);});
 
 render();
 // ---- Modals: farewell + adoption, headstone details, danger warning ----
-function showModal(html,wire){
-  closeModal();const sh=document.createElement('div');sh.className='modal-shade';sh.innerHTML=`<div class="modal" role="dialog" aria-modal="true">${html}</div>`;
+function showModal(html,wire,kind=''){
+  closeModal();const sh=document.createElement('div');sh.className=`modal-shade${kind?` ${kind}-shade`:''}`;sh.innerHTML=`<div class="modal${kind?` ${kind}`:''}" role="dialog" aria-modal="true">${html}</div>`;
   document.body.appendChild(sh);sh.querySelector('[data-close]')?.addEventListener('click',closeModal);wire?.(sh);paintIcons();
 }
 function closeModal(){document.querySelector('.modal-shade')?.remove();}
 const longDate=d=>new Date(d+'T12:00:00').toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'});
 const daysBetween=(a,b)=>Math.max(1,dayDiff(a,b)+1);
-// After completing a quest: score, rewards, level progress (and level-ups / new topics), key points.
+// After completing a quest: score, rewards, level progress (and level-ups / new topics), then the whole feedback.
+// Big on laptops, full screen on phones.
 function showResult(h,lvBefore,topBefore){
-  const lv=level(),up=lv>lvBefore,top=difficulty(),kp=(h.keyPoints?.length?h.keyPoints:parseKeyPoints(h.feedback)).slice(0,3),o=+h.scores.overall||0;
-  showModal(`<h3>Quest complete! ✨</h3>
+  const lv=level(),up=lv>lvBefore,top=difficulty(),kp=h.keyPoints?.length?h.keyPoints:parseKeyPoints(h.feedback),o=+h.scores.overall||0,full=feedbackHtml(h.feedback);
+  showModal(`<div class="result-body">
+    <div class="result-top"><h3>Quest complete! ✨</h3><p class="modal-sub">${esc(h.topic)}</p></div>
     ${o?`<div class="result-score"><b>${o}</b><span>/10 overall</span></div>`:'<p class="modal-sub">No feedback today, still a great practice.</p>'}
     <div class="result-chips"><span>⭐ +${h.earnedXP} XP</span><span>${COIN}+${h.earnedCoins}</span>${h.isDaily?`<span>🔥 ${state.streak}-day streak</span>`:''}${h.spokeSec?`<span>🎙 ${mmss(h.spokeSec)}</span>`:''}</div>
     ${up?`<p class="result-up">Level up! You’re now <b>Lv ${lv} · ${title()}</b>${top>topBefore?`<br>New topics unlocked: <b>${WHEEL_TIERS[top-1][0]}</b>`:''}</p>`:''}
     <div class="result-level"><span>Lv ${lv} · ${title()}</span><span>${state.xp%500}/500 XP</span></div><div class="bar result-bar"><i style="width:${(state.xp%500)/5}%"></i></div>
+    ${o?`<div class="result-scores">${SKILLS.map(s=>`<span>${LABEL[s]}<b>${h.scores[s]||'—'}</b></span>`).join('')}</div>`:''}
     ${kp.length?`<div class="result-kp"><b>Remember next time</b><ul>${kp.map(k=>`<li>${esc(k)}</li>`).join('')}</ul></div>`:''}
-    <div class="modal-foot"><button class="modal-ok" data-close>Back to ${esc(state.cat.name)}</button></div>`);
+    ${full?`<div class="result-feedback"><h4>Full feedback</h4><div class="fb">${full}</div></div>`:''}
+    </div><div class="modal-foot result-foot"><button class="modal-ok" data-close>Back to ${esc(state.cat.name)}</button></div>`,null,'result');
+}
+// The AI's reply as tidy HTML: headings, lists, bold and italics. KEY POINTS and SCORES are shown on their own,
+// so they're left out here.
+function feedbackHtml(text=''){
+  let t=text.replace(/\r/g,'');const cut=t.search(/\n[\s#*]*KEY POINTS:?/i);if(cut>=0)t=t.slice(0,cut);
+  const inline=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*(?!\w)/g,'$1<i>$2</i>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  let html='',list=null;const close=()=>{if(list){html+=`</${list}>`;list=null;}};
+  for(const raw of t.split('\n')){const l=raw.trim();let m;
+    if(!l||/^[-*_]{3,}$/.test(l)){close();continue;}
+    if(/^#*\s*\**scores?\**:?\**\s*$/i.test(l)||/clarity\s*[=:]\s*\d.*overall\s*[=:]\s*\d/i.test(l))continue;
+    if((m=l.match(/^#{1,6}\s+(.*)$/))){close();html+=`<h5>${inline(m[1].replace(/:\s*$/,''))}</h5>`;continue;}
+    if((m=l.match(/^[-•*·]\s+(.*)$/))){if(list!=='ul'){close();html+='<ul>';list='ul';}html+=`<li>${inline(m[1])}</li>`;continue;}
+    if((m=l.match(/^\d+[.)]\s+(.*)$/))){if(list!=='ol'){close();html+='<ol>';list='ol';}html+=`<li>${inline(m[1])}</li>`;continue;}
+    close();html+=`<p>${inline(l)}</p>`;}
+  close();return html;
+}
+// Tapping the level chip: where you are, what's next, and how XP is earned.
+function showLevel(){
+  const lv=level(),into=state.xp%500,next=TITLES.find(([n])=>n>lv),d=difficulty();
+  showModal(`<h3>Level ${lv} · ${title()}</h3><p class="modal-sub">${state.xp} XP so far</p>
+    <div class="result-level"><span>Lv ${lv}</span><span>${into}/500 XP</span><span>Lv ${lv+1}</span></div><div class="bar result-bar"><i style="width:${into/5}%"></i></div>
+    <p>${500-into} XP to level ${lv+1}.${next?` At level ${next[0]} you become a <b>${next[1]}</b>.`:''}</p>
+    <div class="level-ladder">${TITLES.map(([n,t],i)=>{const upTo=TITLES[i+1]?.[0]-1,cur=lv>=n&&!(TITLES[i+1]&&lv>upTo);
+      return `<div class="${cur?'current':lv>=n?'done':''}"><span>Lv ${n}${upTo?(upTo>n?`–${upTo}`:''):'+'}</span><b>${t}</b></div>`;}).join('')}</div>
+    <p class="modal-sub">On your topic wheel: ${WHEEL_TIERS.slice(Math.max(0,d-3),d).map(t=>t[0]).join(' · ')}</p>
+    <div class="result-kp"><b>How to earn XP</b><ul><li>Daily quest: 100 XP</li><li>Extra practice: 35 XP</li><li>Bonuses for AI feedback, not rerolling, and scoring 8+</li></ul></div>
+    <div class="modal-foot"><button class="modal-later" data-see-progress>All progress</button><button class="modal-ok" data-close>Close</button></div>`,
+    sh=>sh.querySelector('[data-see-progress]').onclick=()=>{closeModal();setPanel('progress');});
 }
 function showGrave(g){
   showModal(`<h3>${esc(g.name)}</h3><p class="modal-sub">${cap(g.coat.replace('_',' '))} cat</p>
@@ -878,7 +1114,7 @@ function showAdopt(){
     <div class="modal-foot"><button class="modal-ok" data-welcome>Welcome home</button></div>`,sh=>{
       sh.querySelectorAll('[data-coat-pick]').forEach(b=>b.onclick=()=>{coat=b.dataset.coatPick;sh.querySelectorAll('[data-coat-pick]').forEach(x=>x.classList.toggle('active',x===b));});
       sh.querySelector('[data-welcome]').onclick=()=>{const name=sh.querySelector('#adopt-name').value.trim().slice(0,18);if(!name){toast('Give your kitten a name first.');sh.querySelector('#adopt-name').focus();return;}
-        state.cat={...fresh().cat,name,coat,born:today(),lastUpdated:Date.now()};resetCatPlan();closeModal();catReaction={type:'cheer',started:performance.now()};persist();toast(`Welcome home, ${name}!`);};
+        state.cat={...fresh().cat,name,coat,born:today(),lastUpdated:Date.now()};if(!state.owned.coats.includes(coat))state.owned.coats.push(coat);resetCatPlan();closeModal();catReaction={type:'cheer',started:performance.now()};persist();toast(`Welcome home, ${name}!`);};
       setTimeout(()=>sh.querySelector('#adopt-name')?.focus(),50);});
 }
 // On opening: a heads-up if the cat is down to 1 heart or less.

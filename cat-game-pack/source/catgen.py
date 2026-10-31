@@ -367,8 +367,29 @@ def play():
     return frames
 
 
+def scratch_frame(far_paw, near_paw, hdy=0, eyes="open", tail_tip=0):
+    """Up on the hind legs, front paws on a scratching post to the right."""
+    c = Canvas()
+    draw_tail(c, [(9, 28), (5, 28), (2, 27), (1 + tail_tip, 24 - abs(tail_tip))])
+    c.put(thick([(17, 15), far_paw]), FAR)                     # far front leg
+    c.put(thick([(13, 23), (13, GROUND)]), FAR)                # far hind leg
+    # Upright body: the back's markings run down its left side, cream chest and belly on the right.
+    cx, cy, rx, ry = 14, 20, 4.6, 7.2
+    c.put(ellipse(cx, cy, rx, ry), lambda x, y: patch(x, y, 'back', cx) if x + .5 < cx - rx * .25 else SHADE if y + .5 > cy + ry * .55 else CREAM)
+    c.put(ellipse(11.5, 25.5, 3.8, 3.3), CREAM)                # haunch
+    c.put(rect(9, 28, 13, GROUND), CREAM)
+    draw_head(c, 16, 10 + hdy, eyes)
+    c.put(thick([(18, 16), near_paw]), CREAM)                  # near front leg, over the chest
+    return c.render()
+
+def scratch():
+    # Paws take turns pulling down the post: far paw high while the near one is low, then the other way round.
+    return [scratch_frame((24, 5), (22, 13)), scratch_frame((24, 8), (22, 10), tail_tip=1),
+            scratch_frame((24, 12), (22, 6), hdy=1), scratch_frame((24, 8), (22, 10), eyes="closed", tail_tip=1)]
+
 ANIMS = [("idle", idle, 6), ("sit", sit, 4), ("walk", walk, 10), ("run", run, 12),
-         ("sleep", sleep, 3), ("jump", jump, 10), ("box", box, 5), ("play", play, 8)]
+         ("sleep", sleep, 3), ("jump", jump, 10), ("box", box, 5), ("play", play, 8),
+         ("scratch", scratch, 6)]
 
 def build(outdir):
     os.makedirs(outdir, exist_ok=True)

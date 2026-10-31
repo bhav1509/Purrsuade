@@ -53,8 +53,10 @@ The backend is in [`cloud/`](cloud/README.md) (Cognito, Lambda, S3, DynamoDB, Be
 - Instant AI feedback (Claude) with your account or your own API key, or one-tap ChatGPT / Claude / Gemini
 - Optional sign-in (Google or email) with automatic backup and sync across devices
 - XP, coins, levels, streaks; progress meters and a journal with a monthly calendar
-- Isometric pixel cat room with a garden: 9 coats, 6 room styles, time-of-day sky,
-  tap-to-pet, needs (food, water, litter, play) and movable furniture
+- Isometric pixel cat room with a garden: time-of-day sky, tap-to-pet, needs (food, water, litter, play)
+  and movable furniture
+- Shop (the bag next to "move furniture"): new furniture, new colours for the room, 6 room styles,
+  9 coats and renaming your cat, all paid with the coins you earn by speaking
 
 ## Versions
 Versions follow [Semantic Versioning](https://semver.org) (MAJOR.MINOR.PATCH). Each release to the live
