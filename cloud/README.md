@@ -59,6 +59,8 @@ Lambda → purrsuade-api → Code → Upload from .zip. (Run `npm install` again
 |---|---|---|
 | `DailyCoachLimit` | 10 | Instant feedbacks per person per day (UTC) |
 | `GlobalDailyCoachLimit` | 500 | Instant feedbacks for everyone together per day: the spending cap |
+| `GUEST_DAILY_LIMIT` (Lambda env) | 2 | Free tries without an account, per network address per day (the app also allows one per device) |
+| `GUEST_GLOBAL_LIMIT` (Lambda env) | 100 | Free tries for all guests together per day (they also count toward the global cap) |
 | `CoachModel` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Bedrock model ID; older models (Haiku 4.5) need the inference profile ID |
 | `CoachEffort` | empty | `low` / `medium` / `high` for models that support effort (Haiku 4.5 doesn't) |
 | `SesIdentityArn` / `SesFromAddress` | empty | Send sign-in emails through your own SES address; also turns on passwordless email codes |

@@ -58,7 +58,14 @@ async function cloudDeleteAccount(){
   await api('/account',{method:'DELETE'});
   writeJSON(AUTH_KEY,null);writeJSON(SYNC_KEY,null);coachLeft=null;
 }
-function cloudSignOut(){
+// Signing out sends the latest changes to the account, then this device starts over with a new room (keeping only its
+// own settings, such as the speech model and the tour being done); signing in again brings the account's progress back.
+async function cloudSignOut(){
+  for(let i=0;i<50&&pushing;i++)await new Promise(r=>setTimeout(r,100));
+  if(syncMeta().dirty)await cloudPush();
+  if(syncMeta().dirty&&!confirm('Your latest changes haven’t reached your account yet (are you offline?). Sign out anyway? They’ll be lost.'))return;
+  const keep={};for(const k of [...DEVICE_KEYS,'tourDone'])if(k in state)keep[k]=state[k];
+  try{localStorage.setItem(STORE,JSON.stringify({...fresh(),...keep}));localStorage.removeItem(QUEST_STORE);}catch{}
   writeJSON(AUTH_KEY,null);writeJSON(SYNC_KEY,null);
   location.href=`${CLOUD_CONFIG.authDomain}/logout?${new URLSearchParams({client_id:CLOUD_CONFIG.clientId,logout_uri:appUrl()})}`;
 }
@@ -123,17 +130,29 @@ async function cloudBoot(){
 document.addEventListener('visibilitychange',()=>{if(!signedIn())return;if(document.hidden){if(syncMeta().dirty)cloudPush();}else cloudPull();});
 addEventListener('online',()=>{if(signedIn()&&syncMeta().dirty)cloudPush();});
 
-// ---- Instant AI feedback: through your account (a few free a day) ----
-// 'account' (signed in) or '' (copy-paste with your own AI app only).
-const instantMode=()=>signedIn()?'account':'';
+// ---- Instant AI feedback: through your account (a few free a day), or one free try on this device first ----
+const FREE_TRY_KEY='purrsuade-free-try-used';
+const freeTryUsed=()=>{try{return !!localStorage.getItem(FREE_TRY_KEY);}catch{return true;}};
+const useFreeTry=()=>{try{localStorage.setItem(FREE_TRY_KEY,new Date().toISOString());}catch{}};
+// 'account' (signed in), 'guest' (the free try, not used yet) or '' (sign in, or copy-paste with your own AI app).
+const instantMode=()=>signedIn()?'account':cloudOn()&&!freeTryUsed()?'guest':'';
 let coachLeft=null;
 async function refreshCoachLeft(){if(!signedIn())return;try{const d=await api('/usage');if(d.remaining!==coachLeft){coachLeft=d.remaining;if(panel==='quest')render();}}catch{}}
 async function instantFeedback(){
   const talk={topic:challenge.topic,transcript:challenge.transcript,spokeSec:challenge.spokeSec||0,targetMin:state.duration};
+  if(instantMode()==='guest'){
+    const r=await fetch(CLOUD_CONFIG.api.replace(/\/$/,'')+'/coach',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(talk)});
+    const d=await r.json().catch(()=>({}));
+    // Used up here or from this network today: either way, the next one needs an account.
+    if(r.ok||d.error==='guest-limit')useFreeTry();
+    if(!r.ok)throw Object.assign(new Error(d.error||'api'),{status:r.status,data:d});
+    return d.text;
+  }
   const d=await api('/coach',{method:'POST',body:JSON.stringify(talk)});coachLeft=d.remaining;return d.text;
 }
 // Plain-language reasons for the toast when instant feedback fails.
 function instantError(e){
+  if(e.data?.error==='guest-limit')return 'The free try has been used on this network today. Sign in for free instant feedback every day.';
   if(e.status===429)return e.data?.error==='busy'?'Instant feedback is very busy today. Use your AI app below for now.':`That’s today’s ${e.data?.limit||''} free instant feedbacks. Use your AI app below.`;
   if(e.status===401)return 'Please sign in again.';
   if(!navigator.onLine)return 'You’re offline. Instant feedback needs the internet.';

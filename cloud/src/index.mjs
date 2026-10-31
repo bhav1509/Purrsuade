@@ -1,4 +1,5 @@
-// Purrsuade API (one Lambda behind a function URL). Every request carries a Cognito access token.
+// Purrsuade API (one Lambda behind a function URL). Every request carries a Cognito access token, except a guest's
+// free instant feedback (POST /coach with no token), which is limited per network address and overall.
 //   GET  /progress?etag=…  → {state, etag} | {unchanged:true} | {none:true} when nothing is saved yet
 //   PUT  /progress         {state, etag|null} → {etag} | 409 when another device saved in between
 //   GET  /usage            → {remaining, limit}
@@ -9,11 +10,15 @@ import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectVersionsCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { CognitoIdentityProviderClient, AdminDeleteUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { DynamoDBClient, UpdateItemCommand, GetItemCommand } from '@aws-sdk/client-dynamodb';
+import { createHash } from 'node:crypto';
 import { coachPrompt } from './coach-prompt.mjs';
 
 const { USER_POOL_ID, CLIENT_ID, BUCKET, TABLE, COACH_MODEL, COACH_EFFORT, AWS_REGION } = process.env;
 const DAILY_LIMIT = +process.env.DAILY_LIMIT || 5;
 const GLOBAL_DAILY_LIMIT = +process.env.GLOBAL_DAILY_LIMIT || 300;
+// Guests (not signed in) get a free try: a couple per network address a day, and a small shared daily cap.
+const GUEST_DAILY_LIMIT = +process.env.GUEST_DAILY_LIMIT || 2;
+const GUEST_GLOBAL_LIMIT = +process.env.GUEST_GLOBAL_LIMIT || 100;
 const MAX_STATE_BYTES = 4_000_000, MAX_TRANSCRIPT = 20_000;
 
 const verifier = CognitoJwtVerifier.create({ userPoolId: USER_POOL_ID, tokenUse: 'access', clientId: CLIENT_ID });
@@ -31,17 +36,21 @@ const utcDay = () => new Date().toISOString().slice(0, 10);
 
 export async function handler(event) {
   const method = event.requestContext?.http?.method, path = event.rawPath;
-  let user;
-  try {
-    const token = (event.headers?.authorization || '').replace(/^Bearer\s+/i, '');
-    user = await verifier.verify(token);
-  } catch {
-    return json(401, { error: 'signed-out' });
-  }
   let body = {};
   if (event.body) {
     try { body = JSON.parse(event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString() : event.body); }
     catch { return json(400, { error: 'bad-json' }); }
+  }
+  const token = (event.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!token && path === '/coach' && method === 'POST') {
+    try { return await guestCoach(event.requestContext?.http?.sourceIp || '', body); }
+    catch (e) { console.error('guest coach', e); return json(500, { error: 'server' }); }
+  }
+  let user;
+  try {
+    user = await verifier.verify(token);
+  } catch {
+    return json(401, { error: 'signed-out' });
   }
   try {
     if (path === '/progress' && method === 'GET') return await getProgress(user.sub, event.queryStringParameters?.etag);
@@ -125,12 +134,28 @@ async function remaining(sub) {
   return Math.max(0, DAILY_LIMIT - (+r.Item?.n?.N || 0));
 }
 
-async function coach(sub, { topic, transcript, spokeSec, targetMin }) {
-  if (typeof topic !== 'string' || typeof transcript !== 'string' || !transcript.trim()) return json(400, { error: 'bad-input' });
-  if (transcript.length > MAX_TRANSCRIPT || topic.length > 500) return json(413, { error: 'too-long' });
+const badTalk = ({ topic, transcript }) =>
+  typeof topic !== 'string' || typeof transcript !== 'string' || !transcript.trim() ? json(400, { error: 'bad-input' })
+    : transcript.length > MAX_TRANSCRIPT || topic.length > 500 ? json(413, { error: 'too-long' }) : null;
+async function coach(sub, talk) {
+  const bad = badTalk(talk);if (bad) return bad;
   const day = utcDay(), mine = `${sub}#${day}`, all = `ALL#${day}`;
   if (!(await claim(mine, DAILY_LIMIT))) return json(429, { error: 'limit', remaining: 0, limit: DAILY_LIMIT });
   if (!(await claim(all, GLOBAL_DAILY_LIMIT))) { await release(mine); return json(429, { error: 'busy', limit: DAILY_LIMIT }); }
+  return askClaude(talk, [mine, all], async () => ({ remaining: await remaining(sub) }));
+}
+// A guest's free try. The network address is only kept as a salted hash in a counter that expires in 3 days.
+async function guestCoach(ip, talk) {
+  const bad = badTalk(talk);if (bad) return bad;
+  const day = utcDay(), who = createHash('sha256').update(`${USER_POOL_ID}:${ip}`).digest('hex').slice(0, 32);
+  const mine = `GUEST#${who}#${day}`, guests = `GUESTALL#${day}`, all = `ALL#${day}`;
+  if (!(await claim(mine, GUEST_DAILY_LIMIT))) return json(429, { error: 'guest-limit' });
+  if (!(await claim(guests, GUEST_GLOBAL_LIMIT))) { await release(mine); return json(429, { error: 'busy' }); }
+  if (!(await claim(all, GLOBAL_DAILY_LIMIT))) { await Promise.all([release(mine), release(guests)]); return json(429, { error: 'busy' }); }
+  return askClaude(talk, [mine, guests, all], async () => ({}));
+}
+// Ask Claude for the feedback; the claimed allowances are handed back if it fails or gives no answer.
+async function askClaude({ topic, transcript, spokeSec, targetMin }, claimed, extra) {
   let msg;
   try {
     msg = await claude.messages.create({
@@ -140,13 +165,13 @@ async function coach(sub, { topic, transcript, spokeSec, targetMin }) {
       messages: [{ role: 'user', content: coachPrompt({ topic, transcript, spokeSec: +spokeSec || 0, targetMin: +targetMin || 2 }) }],
     });
   } catch (e) {
-    await Promise.all([release(mine), release(all)]);
+    await Promise.all(claimed.map(release));
     throw e;
   }
   const text = msg.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
   if (msg.stop_reason === 'refusal' || !text) {
-    await Promise.all([release(mine), release(all)]);
+    await Promise.all(claimed.map(release));
     return json(502, { error: 'no-answer' });
   }
-  return json(200, { text, remaining: await remaining(sub) });
+  return json(200, { text, ...await extra() });
 }

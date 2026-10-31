@@ -1,5 +1,5 @@
 // Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
-const APP_VERSION='0.3.3';
+const APP_VERSION='0.3.4';
 const APP_RELEASED='2026-10-31';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
@@ -520,13 +520,16 @@ function scoreStatus(){const n=SCORE_KEYS.filter(k=>challenge.scores[k]).length;
 // ---- Feedback: one tap sends the talk to the user's AI app; then copy its answer and paste it back ----
 // ChatGPT and Claude accept the message in the link (?q=), so it arrives already typed in; for the others we copy it.
 const AI_APPS=[['chatgpt','ChatGPT','https://chatgpt.com/?q='],['claude','Claude','https://claude.ai/new?q='],['gemini','Gemini','https://gemini.google.com/app'],['other','Other app','']];
-// Instant feedback (signed in) fills the answer in directly; the AI-app steps stay as the other way.
+// Instant feedback (signed in, or one free try before that) fills the answer in directly; the AI-app steps stay as the
+// other way.
 let coachBusy=false;
 function instantCard(got){
   const mode=instantMode();
   // Not signed in: an invitation to sign in (instant feedback only comes with an account).
   if(!mode)return cloudOn()?`<div class="instant-card"><div><h4>✨ Instant feedback</h4><p class="muted small">Skip the copy and paste: <b>sign in</b> for ${coachLeft??'a few'} free AI feedbacks a day.</p></div>
     <div class="instant-actions">${CLOUD_CONFIG.google?'<button class="primary" data-sign-in="Google">Continue with Google</button>':''}<button class="${CLOUD_CONFIG.google?'secondary':'primary'}" data-sign-in="">Sign in with email</button></div></div>`:'';
+  if(mode==='guest')return `<div class="instant-card"><div><h4>✨ Instant feedback · free try</h4><p class="muted small">${coachBusy?`${esc(state.cat.name)} is reading your talk… about 10–30 seconds.`:'Try it once without an account: the AI reads your talk and fills in the feedback and scores. Sign in for more every day.'}</p></div>
+    <button class="primary" id="instant-feedback" ${coachBusy?'disabled':''}>${coachBusy?'Getting feedback…':'Get feedback'}</button></div>`;
   const left=coachLeft!=null?` · ${coachLeft} left today`:'';
   return `<div class="instant-card${got?' done':''}"><div><h4>${got?'Feedback added ✓':'✨ Instant feedback'}</h4><p class="muted small">${coachBusy?`${esc(state.cat.name)} is reading your talk… about 10–30 seconds.`:`The AI reads your talk and fills in the feedback and scores${left}.`}</p></div>
     <button class="${got?'secondary':'primary'}" id="instant-feedback" ${coachBusy||(coachLeft===0)?'disabled':''}>${coachBusy?'Getting feedback…':got?'Get new feedback':coachLeft===0?'None left today':'Get feedback'}</button></div>`;
@@ -534,7 +537,8 @@ function instantCard(got){
 async function getInstantFeedback(){
   if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}
   if(coachBusy)return;coachBusy=true;render();
-  try{const text=await instantFeedback();if(challenge){setFeedback(text);toast(SCORE_KEYS.every(k=>challenge.scores[k])?'Feedback added · scores filled in':'Feedback added');}}
+  const guest=instantMode()==='guest';
+  try{const text=await instantFeedback();if(challenge){setFeedback(text);toast((SCORE_KEYS.every(k=>challenge.scores[k])?'Feedback added · scores filled in':'Feedback added')+(guest?' · that was your free try, sign in for more':''));}}
   catch(e){toast(instantError(e));manualOpen=true;}
   finally{coachBusy=false;render();}
 }
@@ -922,7 +926,7 @@ function bindPanel(){
   q('#instant-feedback')?.addEventListener('click',getInstantFeedback);
   q('.manual-coach')?.addEventListener('toggle',e=>{manualOpen=e.target.open;});
   qa('[data-sign-in]').forEach(b=>b.onclick=()=>cloudSignIn(b.dataset.signIn));
-  q('#sign-out')?.addEventListener('click',()=>{if(confirm('Sign out? Your progress stays on this device and in your account.'))cloudSignOut();});
+  q('#sign-out')?.addEventListener('click',()=>{if(confirm('Sign out? Your progress is saved in your account. This device starts a fresh room until you sign in again.'))cloudSignOut();});
   q('#delete-account')?.addEventListener('click',async e=>{
     if(!confirm('Delete your account? This removes your sign-in and the progress saved in your account. Progress on this device stays (use Reset to clear it). This cannot be undone.'))return;
     e.currentTarget.disabled=true;
