@@ -1,5 +1,5 @@
 // Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
-const APP_VERSION='0.3.1';
+const APP_VERSION='0.3.2';
 const APP_RELEASED='2026-10-31';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
@@ -29,7 +29,7 @@ outer: for(const [d,t] of BASE_TOPICS){for(const v of VARIATIONS){TOPICS.push({d
 const SKILLS=['clarity','structure','confidence','vocabulary','conciseness','grammar'];
 const LABEL={clarity:'Clarity',structure:'Structure',confidence:'Confidence',vocabulary:'Vocabulary',conciseness:'Conciseness',grammar:'Grammar',overall:'Overall'};
 
-function fresh(){return {xp:0,coins:80,streak:0,lastDaily:null,duration:2,room:'cream_checker',layout:{},history:[],cat:{name:'Miso',coat:'orange_tabby',hunger:82,thirst:82,cleanliness:82,happiness:82,lastUpdated:Date.now(),zeroSince:null,alive:true,born:today()},graves:[],owned:{coats:['orange_tabby'],rooms:['cream_checker'],items:['plant_big_sky','cardboard_box']},decor:{variants:{},extras:[{id:'plant',sprite:'plant_big_sky',x:170,y:10},{id:'box',sprite:'cardboard_box',x:144,y:144}],hidden:[],starter:2},version:1};}
+function fresh(){return {xp:0,coins:80,streak:0,lastDaily:null,duration:2,room:'cream_checker',layout:{},history:[],cat:{name:'Miso',coat:'orange_tabby',hunger:82,thirst:82,cleanliness:82,happiness:82,lastUpdated:Date.now(),zeroSince:null,alive:true,born:today()},graves:[],owned:{coats:['orange_tabby'],rooms:['cream_checker'],items:['plant_big_sky','cardboard_box']},decor:{variants:{},extras:[{id:'plant',sprite:'plant_big_sky',x:12,y:12},{id:'box',sprite:'cardboard_box',x:144,y:126}],hidden:[],starter:2},version:1};}
 function load(){try{return hydrate({...fresh(),...JSON.parse(localStorage.getItem(STORE)||'{}')});}catch{return fresh();}}
 function hydrate(d){const savedBorn=d.cat?.born;d.cat={...fresh().cat,...(d.cat||{})};d.graves=Array.isArray(d.graves)?d.graves:[];d.history=d.history||[];
   // Cats from before birthdays were tracked: born on the day of the first session (or after the previous cat).

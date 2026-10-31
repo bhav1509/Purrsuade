@@ -4,6 +4,9 @@ Versions follow [Semantic Versioning](https://semver.org): MAJOR.MINOR.PATCH.
 PATCH = bug fixes, MINOR = new features, MAJOR = the 1.0.0 public launch (and later, big breaking changes).
 Every push to the live app gets a new version, shown in Settings → About. Publish with `scripts/release.sh`.
 
+## v0.3.2 · 2026-10-31
+- Phone: whole room in view at the start, pinch out a little further, even crisp lines; clearer arranging grid on wood and carpet floors; tidier starting room; the cat goes into and out of the cardboard box; chunkier menu and Speak icons; no gap under the island's side corners
+
 ## v0.3.1 · 2026-10-31
 - Simpler starter room (bed, bowls, litter tray, a window, a plant and a box); windows, paintings and clocks in the shop; the cat walks round furniture, climbs the cat tree level by level and goes into condos and teepees; selection rings that hug each piece; tidier shop with colours in Cat stuff and Room & cat together; armchair instead of sofa; new grass details and icons
 

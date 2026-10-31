@@ -21,15 +21,16 @@ const WALL_ITEMS=[
   {id:'window',base:'window_curtain_rose',name:'Window',side:'left',along:26,z:50,keep:true},
 ];
 const WALL_TOP=136; // wall items stay below the top trim of the 140 px walls
-// What every room has: the bed under the window, the litter tray on the other wall and the bowls together at the
-// front. They can be moved in arrange mode but not put away (`keep`). [x, y] is the default spot; `spot` is where
-// the cat stands to use it ([dx, dy, z, face left]). Everything else is bought in the shop (a new room starts with
-// a big plant and a cardboard box, see fresh() in app.js).
+// What every room has, laid out with the starter plant and box (see fresh() in app.js) so the room reads tidy: the
+// plant in the back corner, the bed centred under the window, the bowls together along the same wall nearer the
+// front, the litter tray at the far end of the other wall (away from the food), the box at the front right, and
+// open floor in the middle. They can be moved in arrange mode but not put away (`keep`). `spot` is where the cat
+// stands to use it ([dx, dy, z, face left]).
 const ROOM_ITEMS=[
-  {id:'bed',sprite:'basket_bed_sage',name:'Bed',x:27,y:54,shadow:19,spot:[0,0,4,false],keep:true},
-  {id:'litter',sprite:'litter_tray_mint',name:'Litter tray',x:162,y:54,spot:[0,0,3,false],keep:true},
-  {id:'food',sprite:'bowl_sky_kibble',name:'Food bowl',bowl:['bowl_sky_kibble','bowl_sky_empty','hunger'],x:54,y:162,shadow:6,spot:[-6,2,0,false],keep:true},
-  {id:'water',sprite:'bowl_blush_water',name:'Water bowl',bowl:['bowl_blush_water','bowl_blush_empty','thirst'],x:75,y:162,shadow:6,spot:[-6,2,0,false],keep:true},
+  {id:'bed',sprite:'basket_bed_sage',name:'Bed',x:19,y:59,shadow:19,spot:[0,0,4,false],keep:true},
+  {id:'litter',sprite:'litter_tray_mint',name:'Litter tray',x:153,y:18,spot:[0,0,3,false],keep:true},
+  {id:'food',sprite:'bowl_sky_kibble',name:'Food bowl',bowl:['bowl_sky_kibble','bowl_sky_empty','hunger'],x:16,y:120,shadow:6,spot:[6,2,0,true],keep:true},
+  {id:'water',sprite:'bowl_blush_water',name:'Water bowl',bowl:['bowl_blush_water','bowl_blush_empty','thirst'],x:16,y:140,shadow:6,spot:[6,2,0,true],keep:true},
 ];
 // Small things that can stand on a shelf or side table as well as on the floor.
 const SMALL=/^(plant_small|book_stack|cactus|toy_|treat_jar)/;
@@ -47,7 +48,11 @@ const SHELF_SIDE=[47,0,0,3,18,62],RACKS={shelf:[[3,[[3,0,20,44,18,3],SHELF_SIDE]
 // through it (see drawSqueezing), and only its eyes show in the doorway ([dx, dy, z]) until it comes back out.
 const PERCHES={armchair:[[0,5,23,'sit']],cat_tree:[[8,-8,37,'sit'],[-8,8,65,'sit'],[-8,-8,96,'sleep']],
   condo:[[8,-8,57,'sit'],[-1,20,0,'inside',false,[[-1,12],[-1,0],[-1,12,12]]]],scratcher:[[2,14,0,'scratch',false]],scratch_post:[[2,14,0,'scratch',false]],stool:[[0,0,27,'sit']],
-  bed:[[0,0,4,'sleep']],floor_cushion:[[0,0,4,'sit']],teepee:[[3,22,0,'inside',false,[[3,14],[3,2],[3,14,8]]]],aquarium:[[19,27,0,'sit']]};
+  bed:[[0,0,4,'sleep']],cardboard_box:[[0,0,0,'sit',false,'into']],floor_cushion:[[0,0,4,'sit']],teepee:[[3,22,0,'inside',false,[[3,14],[3,2],[3,14,8]]]],aquarium:[[19,27,0,'sit']]};
+// 'into' (the cardboard box): the cat hops over the rim and sinks down inside, then rises and hops out. While it's
+// in, these parts of the box ([x, y, z, dx, dy, dz] around its floor point: the front wall and flap, the right wall
+// and flap) are drawn again over it, so only its head peeks out.
+const COVERS={cardboard_box:[[-12,9,0,24,9,14],[11,-10,0,8,20,14]]};
 const kindOf=(table,name)=>Object.keys(table).filter(k=>name.startsWith(k)).sort((a,b)=>b.length-a.length)[0];
 // Shop purchases: `variants` recolours a built-in item ({id: sprite}); `extras` are bought pieces of furniture
 // ([{id, sprite, x, y, turned}]), which can be moved (and some turned) like the rest; `hidden` lists built-in
@@ -158,8 +163,9 @@ function updateSpots(){
     const [x,y]=itemPos(it),[,,a1,b1]=footprint(it);
     PERCHES[k].forEach(([dx,dy,z,anim,face,door],n)=>{const sw=p=>it.turned?[p[1],p[0],...p.slice(2)]:p;[dx,dy]=sw([dx,dy]);
       // Raised seats are reached by a jump from the floor in front of the piece.
-      const g=z>6?(y+b1+8<=176?[x+dx,y+b1+8]:[x+a1+8,y+dy]):[x+dx,y+dy];
-      SPOT[`@${it.id}:${n}`]=[fix(x+dx),fix(y+dy),z,face,fix(g[0]),fix(g[1]),x+y,anim,...(door?door.map(sw).map(([u,v,w])=>[x+u,y+v,w??0]):[])];});
+      // (The box's flaps lie open a few units past its walls, so the cat takes off from further out.)
+      const out=door==='into'?13:8,g=z>6||door==='into'?(y+b1+out<=176?[x+dx,y+b1+out]:[x+a1+out,y+dy]):[x+dx,y+dy];
+      SPOT[`@${it.id}:${n}`]=[fix(x+dx),fix(y+dy),z,face,fix(g[0]),fix(g[1]),x+y,anim,...(door==='into'?['into']:door?door.map(sw).map(([u,v,w])=>[x+u,y+v,w??0]):[])];});
     const raised=PERCHES[k].map((p,n)=>`@${it.id}:${n}`).filter(key=>SPOT[key][2]>6).sort((p,q)=>SPOT[p][2]-SPOT[q][2]);
     raised.forEach((key,n)=>{CLIMB[key]=raised.slice(0,n).map(p=>SPOT[p].slice(0,3));});}
 }
@@ -257,6 +263,8 @@ function buildPlan(start,from,steps,loop){
   const segs=[];let t=0,pos=from.slice(0,3),flip=from[3],spot=null,ground=from[4]!=null?[from[4],from[5]]:null,depth=from[6],inside=from[7],perch=from[8];
   const face=to=>{const dx=(to[0]-pos[0])-(to[1]-pos[1]);if(Math.abs(dx)>2)flip=dx<0;};
   const hop=(to,d)=>{face(to);segs.push({t0:t,t1:t+.6,from:pos,to,anim:'jump',flip,depth:d,perch});t+=.6;pos=to;};
+  // Up out of (or down into) the box: a short slide in height, sitting, to z (and to xy if given).
+  const rise=(z,d,xy=pos)=>{const to=[xy[0],xy[1],z];segs.push({t0:t,t1:t+.35,from:pos,to,anim:'sit',flip,depth:d,perch});t+=.35;pos=to;};
   const pause=d=>{segs.push({t0:t,t1:t+.35,from:pos,to:pos,anim:'sit',flip,depth:d,perch});t+=.35;};
   // A walk at the usual pace; through a doorway it's drawn in front of the piece (`d`), squeezing through (spot key).
   const walk=(to,d,squeeze)=>{face(to);const dur=Math.max(.25,Math.hypot(to[0]-pos[0],to[1]-pos[1])/WALK_SPEED);
@@ -267,19 +275,21 @@ function buildPlan(start,from,steps,loop){
       if(inside&&SPOT[inside]){const s=SPOT[inside];walk([...s[8].slice(0,2),0],s[6],inside);walk(s.slice(0,3),s[6],inside);}inside=null;
       if(Math.hypot(to[0]-pos[0],to[1]-pos[1])<1&&Math.abs(to[2]-pos[2])<1){pos=to.slice(0,3);continue;}
       // Down off the furniture first (level by level on a cat tree), then walk, then up onto the next piece.
-      if(pos[2]>6){for(const v of [...(CLIMB[perch]||[])].reverse())if(v[2]<pos[2]-1){hop(v,depth);pause(depth);}hop([...(ground||pos.slice(0,2)),0],depth);}
+      if(SPOT[perch]?.[8]==='into'){rise(16,depth);hop([...(ground||pos.slice(0,2)),0],depth);}
+      else if(pos[2]>6){for(const v of [...(CLIMB[perch]||[])].reverse())if(v[2]<pos[2]-1){hop(v,depth);pause(depth);}hop([...(ground||pos.slice(0,2)),0],depth);}
       perch=null;
-      const up=to[2]>6,walkTo=up?[to[4],to[5],0]:to.slice(0,3),dist=Math.hypot(walkTo[0]-pos[0],walkTo[1]-pos[1]);
+      const into=to[8]==='into',up=to[2]>6||into,walkTo=up?[to[4],to[5],0]:to.slice(0,3),dist=Math.hypot(walkTo[0]-pos[0],walkTo[1]-pos[1]);
       if(dist>=1)for(const leg of catRoute(pos,walkTo)){
         face(leg);const dur=Math.max(.3,Math.hypot(leg[0]-pos[0],leg[1]-pos[1])/WALK_SPEED);
         segs.push({t0:t,t1:t+dur,from:pos,to:leg,anim:'walk',flip});t+=dur;pos=leg;
       }
-      if(up){perch=step.to;for(const v of CLIMB[step.to]||[]){hop(v,to[6]);pause(to[6]);}hop(to.slice(0,3),to[6]);}
+      if(into){perch=step.to;hop([to[0],to[1]+4,16],to[6]);pos=[to[0],to[1]+4,16];rise(0,to[6],to.slice(0,2));}
+      else if(up){perch=step.to;for(const v of CLIMB[step.to]||[]){hop(v,to[6]);pause(to[6]);}hop(to.slice(0,3),to[6]);}
       if(to[7]==='inside'){walk([...to[8].slice(0,2),0],to[6],step.to);walk([...to[9].slice(0,2),0],to[6],step.to);inside=step.to;}
       ground=up?[to[4],to[5]]:null;depth=up?to[6]:undefined;
     }else{
       if(step.at){const at=SPOT[step.at];pos=at[7]==='inside'?[...at[9].slice(0,2),0]:at.slice(0,3);flip=step.flip??at[3]??flip;spot=step.at;
-        ground=at[2]>6?[at[4],at[5]]:null;depth=at[2]>6||at[7]==='inside'?at[6]:undefined;inside=at[7]==='inside'?step.at:null;perch=at[2]>6?step.at:null;}
+        const raised=at[2]>6||at[8]==='into';ground=raised?[at[4],at[5]]:null;depth=raised||at[7]==='inside'?at[6]:undefined;inside=at[7]==='inside'?step.at:null;perch=raised?step.at:null;}
       segs.push({t0:t,t1:t+step.dur,from:pos,to:pos,anim:step.anim,flip,spot:step.at,hearts:step.hearts,hideYarn:step.hideYarn,ground,depth,perch});t+=step.dur;
     }
   }
@@ -456,6 +466,8 @@ const roomCams={};
 const MAX_ZOOM=3;
 function camFor(canvas){const k=canvas.dataset.cam;return k?(roomCams[k]||(roomCams[k]={x:0,y:0,zoom:1})):null;}
 function camIsHome(cam){return cam.zoom===1&&!cam.x&&!cam.y;}
+// How far out the camera may zoom: on a phone, until the whole room's width shows; elsewhere, not past the fit.
+const minZoom=canvas=>canvas._tall?.85:1;
 
 // Fit the room into the canvas, keeping clear of overlay bands (data-pad-top/bottom, CSS px)
 // when that costs little size; snap to whole-number zoom when it costs little space.
@@ -472,10 +484,12 @@ function fitCanvas(canvas){
   const pt=(+canvas.dataset.padTop||0)*dpr,pb=(+canvas.dataset.padBottom||0)*dpr;
   const full=Math.min(W/r.w,H/r.h),padded=Math.min(W/r.w,Math.max(1,H-pt-pb)/r.h),usePad=padded>=full*.9;
   let fit=usePad?padded:full;const cam=camFor(canvas),zoom=cam?cam.zoom:1;
-  // Tall, narrow stages (phones) leave the room tiny, so draw it larger and let the sides spill;
-  // the camera can pan to the edges.
-  if(cam&&H/W>(r.h/r.w)*1.2)fit=Math.min(fit*1.65,(usePad?H-pt-pb:H)/r.h);
-  const scale=zoom!==1?fit*zoom:fit>=1&&Math.floor(fit)/fit>.85?Math.floor(fit):fit;
+  // On tall, narrow stages (phones) the whole room shows to start with; pinch to zoom in (or a little further out,
+  // see minZoom), and the camera can pan to the edges.
+  canvas._tall=!!cam&&H/W>(r.h/r.w)*1.2;
+  // A whole number of screen pixels per room pixel when that's at least 3 (sharp phone screens), so every line in
+  // the art is drawn equally thick; otherwise the old rule (whole numbers only when they cost little room).
+  const raw=fit*zoom,scale=raw>=3?(zoom===1?Math.floor(raw):Math.round(raw)):zoom===1&&raw>=1&&Math.floor(raw)/raw>.85?Math.floor(raw):raw;
   const top=usePad?pt:0,avail=usePad?H-pt-pb:H;
   let x=(W-r.w*scale)/2,y=top+(avail-r.h*scale)/2;
   if(cam){
@@ -509,7 +523,7 @@ function enableRoomCamera(canvas,{pinch,onTap,onChange,resetButton,zoomIn,zoomOu
       if(!pinch||!start.d)return;
       // Zoom about the pinch midpoint so the spot under the fingers stays put.
       const rc=canvas.getBoundingClientRect(),px=start.x-(rc.left+rc.width/2),py=start.y-(rc.top+rc.height/2);
-      const z=Math.max(1,Math.min(MAX_ZOOM,start.zoom*now.d/start.d)),k=z/start.zoom;
+      const z=Math.max(minZoom(canvas),Math.min(MAX_ZOOM,start.zoom*now.d/start.d)),k=z/start.zoom;
       cam.zoom=z;cam.x=px-(px-start.camX)*k+(now.x-start.x);cam.y=py-(py-start.camY)*k+(now.y-start.y);moved=true;
     }else{
       const dx=now.x-start.x,dy=now.y-start.y;if(Math.hypot(dx,dy)>6)moved=true;
@@ -526,10 +540,10 @@ function enableRoomCamera(canvas,{pinch,onTap,onChange,resetButton,zoomIn,zoomOu
   canvas.onpointerup=e=>end(e,true);canvas.onpointercancel=e=>end(e,false);
   if(resetButton)resetButton.onclick=()=>{cam.x=0;cam.y=0;cam.zoom=1;sync();};
   // Zoom buttons (laptop): step about the middle of the view.
-  const zoomBy=f=>{const z=Math.max(1,Math.min(MAX_ZOOM,Math.round(cam.zoom*f*4)/4)),k=z/cam.zoom;cam.zoom=z;cam.x*=k;cam.y*=k;sync();};
+  const zoomBy=f=>{const z=Math.max(minZoom(canvas),Math.min(MAX_ZOOM,Math.round(cam.zoom*f*4)/4)),k=z/cam.zoom;cam.zoom=z;cam.x*=k;cam.y*=k;sync();};
   if(zoomIn)zoomIn.onclick=()=>zoomBy(1.5);
   if(zoomOut)zoomOut.onclick=()=>zoomBy(1/1.5);
-  const baseSync=sync;sync=()=>{baseSync();if(zoomIn)zoomIn.disabled=cam.zoom>=MAX_ZOOM;if(zoomOut)zoomOut.disabled=cam.zoom<=1;};
+  const baseSync=sync;sync=()=>{baseSync();if(zoomIn)zoomIn.disabled=cam.zoom>=MAX_ZOOM;if(zoomOut)zoomOut.disabled=cam.zoom<=minZoom(canvas);};
   canvas._camSync=sync;
   sync();
 }
@@ -580,15 +594,18 @@ function buildGarden(){
   const rm=CAT_ATLAS.rooms[roomStyle],P=GARDEN_PAD,c=document.createElement('canvas');
   c.width=rm.w+P.x*2;c.height=rm.h+P.top+P.bottom;const g=c.getContext('2d');g.translate(P.x,P.top);
   const G=GARDEN_G,[ox,oy]=rm.floorOrigin,top=oy-G,bot=oy+180+G,mid=(top+bot)/2,T=12;
-  // island sides: soil under the front-left and front-right edges, a band T deep that comes to a point at the front
-  for(let y=Math.round(mid);y<=bot+T;y++){const hw=2*Math.min(y-T-top,bot+T-y),hwTop=2*Math.max(0,bot-y);if(hw<=hwTop)continue;
+  // Keeps a 2px soil speck or grass fringe from poking past the island's side corners.
+  const inSoil=X=>Math.max(ox-2*(bot-mid),Math.min(ox+2*(bot-mid)-2,Math.round(X)));
+  // island sides: soil under the front-left and front-right edges, the grass edge pushed T pixels straight down:
+  // full width under the side corners, coming to a point at the front
+  for(let y=Math.round(mid);y<=bot+T;y++){const hw=2*Math.min(bot-mid,bot+T-y),hwTop=2*Math.max(0,bot-y);if(hw<=hwTop)continue;
     g.fillStyle='#8a6646';g.fillRect(ox-hw,y,hw-hwTop,1);g.fillStyle='#a07a55';g.fillRect(ox+hwTop,y,hw-hwTop,1);}
-  for(let i=0;i<260;i++){const t=hash(i+.3),side=t<.5?-1:1,u=hash(i+9.1),y=mid+T+u*(bot-mid-T),hw=2*(bot-y),dy=hash(i+4.2)*(T-4);
-    g.fillStyle=hash(i+2)<.5?'#74553a':'#b58c63';g.fillRect(Math.round(ox+side*(hw+hash(i+7)*0)-(side<0?1:0)*2),Math.round(y+2+dy),2,1);}
+  for(let i=0;i<260;i++){const t=hash(i+.3),side=t<.5?-1:1,u=hash(i+9.1),y=mid+u*(bot-mid),hw=2*(bot-y),dy=hash(i+4.2)*(T-4);
+    g.fillStyle=hash(i+2)<.5?'#74553a':'#b58c63';g.fillRect(inSoil(ox+side*hw-(side<0?2:0)),Math.round(y+2+dy),2,1);}
   // grass top, a pixel row at a time so the diamond edges stay crisp
   for(let y=top;y<=bot;y++){const hw=2*Math.min(y-top,bot-y);g.fillStyle='#9ccf7f';g.fillRect(ox-hw,y,hw*2,1);}
   // grass fringe hanging over the soil edge
-  for(let i=0;i<120;i++){const u=hash(i+20.5),y=mid+T+u*(bot-mid-T),hw=2*(bot-y),side=hash(i+3.3)<.5?-1:1;g.fillStyle='#7fb86a';g.fillRect(Math.round(ox+side*hw)-1,Math.round(y)+1,2,1+Math.floor(hash(i+5)*3));}
+  for(let i=0;i<120;i++){const u=hash(i+20.5),y=mid+u*(bot-mid),hw=2*(bot-y),side=hash(i+3.3)<.5?-1:1;g.fillStyle='#7fb86a';g.fillRect(inSoil(ox+side*hw-1),Math.round(y)+1,2,1+Math.floor(hash(i+5)*3));}
   const inside=(x,y)=>x>-G+4&&y>-G+4&&x<180+G-4&&y<180+G-4,inRoom=(x,y)=>x>-6&&y>-6&&x<186&&y<186;
   // soft shadow where the room sits on the grass
   for(let y=oy;y<=oy+180+8;y++){const hw=2*Math.min(y-oy,oy+188-y);g.fillStyle='#86bb6c';g.fillRect(ox-hw-6,y+4,hw*2+12,1);}
@@ -678,7 +695,10 @@ function drawRoom(canvas,time,cat,reaction,style){
     // Inside a condo or teepee only the eyes show, drawn in their place (so whatever stands nearer hides them); the
     // pixels of them still showing are lit again after the night tint so they glow in the dark.
     if(eyes)items.push({depth:pose.depth+.5,draw:()=>{const [X,Y]=project(...eyes);drawEyes(b,X,Y,time);glowEyes=[Math.round(X)-3,Math.round(Y)];}});
-    else items.push({depth:pose.depth!=null?pose.depth+.5:pose.x+pose.y+(pose.z?1:0),draw:()=>{
+    // In the cardboard box: its front walls go back over the cat.
+    const box=pose.depth!=null&&roomItems.find(it=>COVERS[kindOf(COVERS,it.base)]&&!hostOf(it)&&(([ix,iy],[a0,b0,a1,b1])=>pose.x>ix+a0&&pose.x<ix+a1&&pose.y>iy+b0&&pose.y<iy+b1)(itemPos(it),footprint(it)));
+    if(box)items.push({depth:pose.depth+.6,draw:()=>{const s=CAT_ATLAS.sprites[box.sprite],[X,Y]=project(...itemPos(box));b.drawImage(spriteBoxes(box.sprite,COVERS[kindOf(COVERS,box.base)]),Math.round(X-s.anchor[0]),Math.round(Y-s.anchor[1]));}});
+    if(!eyes)items.push({depth:pose.depth!=null?pose.depth+.5:pose.x+pose.y+(pose.z?1:0),draw:()=>{
       const [X,Y]=project(pose.x,pose.y,pose.z);catXY=[X,Y];
       if(pose.squeeze){drawSqueezing(b,cat.coat,pose,X,Y);return;}
       if(!pose.z)drawShadow(b,pose.x,pose.y,0,8);
@@ -766,9 +786,11 @@ function isoLine(ctx,a,b){
   const n=Math.ceil(Math.max(...a.map((v,k)=>Math.abs(b[k]-v)))*2);
   for(let i=0;i<=n;i++){const [X,Y]=project(...a.map((v,k)=>v+(b[k]-v)*i/n));ctx.fillRect(Math.floor(X),Math.floor(Y),1,1);}
 }
-// Lines a shade darker than the floor (or wall) under them: the 10 x 10 floor tiles, edges included.
-const GRID_INK='rgba(70,45,30,.2)';
+// Lines a shade darker than the floor (or wall) under them: the 10 x 10 floor tiles, edges included. The floor is
+// washed paler first so its own pattern (wood planks, carpet) fades back and only the grid's lines stand out.
+const GRID_INK='rgba(70,45,30,.26)';
 function drawFloorGrid(ctx){
+  ctx.fillStyle='rgba(255,250,242,.38)';ctx.beginPath();[[0,0],[180,0],[180,180],[0,180]].map(p=>project(...p)).forEach(([X,Y],i)=>i?ctx.lineTo(X,Y):ctx.moveTo(X,Y));ctx.fill();
   ctx.fillStyle=GRID_INK;
   for(let k=0;k<=180;k+=TILE){isoLine(ctx,[k,0,0],[k,180,0]);isoLine(ctx,[0,k,0],[180,k,0]);}
 }
