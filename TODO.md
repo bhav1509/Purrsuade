@@ -23,7 +23,7 @@ launch (see "Launch week"), so the first testers' sessions before that won't be 
       laptop suite (58 checks) covers buying, placing, put away, wall decor, colours, room, coat, rename and old saves.
       Sync to a second device is still in the QA checklist below.
 - [x] **Release v0.3.0** with `scripts/release.sh minor "Shop: furniture, colours, room styles and coats"`.
-- [ ] **Message 3–5 LinkedIn testers** (including one less technical person) with the link; ask them to sign in.
+- [ ] ~~**Message 3–5 LinkedIn testers**~~ Skipped for lack of time (a ready-to-send message is in the chat history); the public post does this job.
 - [ ] Start device testing on my own phone: iPhone Safari, the installed iPhone app (sign-in is the biggest risk there).
 
 **Thu 29 Oct: build tracking and the feedback popups** → moved to launch week (not started)
@@ -58,18 +58,20 @@ Goal: see where signed-in beta testers drop off, and whether the idea is worth c
 - [x] **Clean up the UI.** Done over v0.3.1–v0.3.3: starter room, shop (two tabs, colour picker, wall decor),
       selection rings, the cat walking round furniture and using the cat tree / condo / teepee / box, garden, icons,
       phone zoom and crisp lines, a shorter Speak screen, own-API-key option removed.
-- [ ] **Clean up the topics.** Read through the topic list and remove weak, repeated or awkward prompts (the demo
-      video shows them).
+- [x] **Clean up the topics** (goes out with the next release): 76 prompts; levels 1–3 are one sentence, levels
+      4–7 add a short matching challenge; duplicates and tech-only prompts replaced; all prompts now come up.
 
 **Sat 31 Oct: feature freeze and launch content**
-- [ ] **Release v0.3.3** (ready, tested: 58/58 on phone and laptop): API key option removed, desk-mic icon everywhere,
-      shorter Speak screen, no glowing mic, smooth pinch zoom on phones. Then check it live on the phone.
-- [ ] **Hand check on my iPhone** (the things automated tests can't do): sign in inside the installed app, one full
-      quest with Whisper transcription and instant feedback, drag furniture with a finger.
+- [x] **Release v0.3.3**: API key option removed, desk-mic icon everywhere, shorter Speak screen, no glowing mic,
+      smooth pinch zoom on phones. Checked live on phone size.
+- [x] **Hand check on my iPhone.** Fine apart from three things, fixed in **v0.3.4** (live, checked):
+      signing out now resets the device to a fresh room; one free instant feedback without an account (backend
+      guest path, 2 per network a day, 100 for all guests); Cognito password rule relaxed to 8+ characters.
+      (Email sign-in with my Gmail can't work: that account was made with Google, so it has no password.)
 - [ ] Feature freeze: bug fixes only from here.
 - [ ] Demo video (60–90 s, vertical, captions; shot list in LAUNCH.md), recorded on the final build.
-- [ ] 3–4 screenshots for the post.
-- [ ] Edit the LinkedIn post draft in LAUNCH.md into my own voice; schedule it if possible.
+- [x] 3–4 screenshots for the post (room, topic, feedback with scores, shop, progress; phone size 1170×2532).
+- [ ] Edit the LinkedIn post draft in LAUNCH.md into my own voice (updated 1 Nov to match what's live); schedule it if possible.
 - [ ] Check the dashboard and tester comments; fix anything that blocks launch.
 - [ ] Final pass of the LAUNCH.md checklist.
 
@@ -83,6 +85,9 @@ Goal: see where signed-in beta testers drop off, and whether the idea is worth c
       a patch release and a check that events reach DynamoDB.
 - [ ] **Local dashboard** (the Fri 30 Oct plan above).
 - [ ] Read tester comments; fix what comes up.
+- [ ] **Sign-in emails from my own address (Amazon SES):** Cognito's default sender often lands in spam and allows
+      ~50 emails a day. Verify an address in SES, request production access (can take a day), then switch the user
+      pool's email to SES.
 - [ ] Later, if testers report transcription mistakes: cloud transcription (e.g. AWS Transcribe) as an option. Costs a
       few cents a talk, and the audio leaves the device, so the privacy policy changes.
 - [ ] Optional: remove `examples/sample-backup-2026-10-05.json` (my own transcripts) from the git history.

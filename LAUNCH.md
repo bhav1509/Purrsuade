@@ -40,13 +40,15 @@ burn in captions (most people watch muted).
 > I get nervous speaking off the cuff, so I built a little game to make myself practice every day. Today it's public. 🐱
 >
 > **Purrsuade** gives you a topic, you talk for a couple of minutes, and an AI coach scores your clarity, structure
-> and confidence with one concrete thing to improve. Every session earns coins to look after a pixel cat, so
-> there's a reason to come back tomorrow.
+> and confidence, with a few concrete things to work on. Every session earns coins to look after a pixel cat and
+> decorate its room, so there's a reason to come back tomorrow.
 >
 > What's in v1.0:
-> • Instant AI feedback (Claude), or use your own ChatGPT / Claude / Gemini
+> • Instant AI feedback (Claude): your first one is free, sign in for more every day. Or use your own ChatGPT / Claude / Gemini
 > • Your words written out as you speak, on your device
-> • Sign in to keep your progress safe and use it on any device (or play without an account)
+> • 76 prompts across 7 levels, from "Describe your ideal weekend" to "Ask for a raise"
+> • A cat to look after and a room to decorate with what you earn
+> • Sign in to keep your progress and use it on any device (or play without an account)
 > • Works on your phone and installs like an app
 >
 > Built as a side project with vanilla JS, AWS (Cognito, Lambda, S3, DynamoDB, Bedrock) and a lot of pixel art.
@@ -56,5 +58,5 @@ burn in captions (most people watch muted).
 >
 > #publicspeaking #communication #sideproject #buildinpublic #aws
 
-Post with the video attached natively (not as a YouTube link). Put the link in the post text, and reply to
-early comments in the first hour.
+Attach the video natively if there is one (not as a YouTube link); otherwise the screenshots (room, topic,
+feedback, shop) as a multi-image post. Put the link in the post text, and reply to early comments in the first hour.

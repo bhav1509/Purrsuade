@@ -4,6 +4,9 @@ Versions follow [Semantic Versioning](https://semver.org): MAJOR.MINOR.PATCH.
 PATCH = bug fixes, MINOR = new features, MAJOR = the 1.0.0 public launch (and later, big breaking changes).
 Every push to the live app gets a new version, shown in Settings → About. Publish with `scripts/release.sh`.
 
+## v1.0.0 · 2026-11-01
+- Public launch: 76 cleaner speaking prompts (one sentence at the easy levels, a fitting extra challenge from level 4)
+
 ## v0.3.4 · 2026-10-31
 - One free instant feedback without an account; signing out resets this device to a fresh room (progress stays in your account)
 

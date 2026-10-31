@@ -48,7 +48,7 @@ AWS, when signed in).
 The backend is in [`cloud/`](cloud/README.md) (Cognito, Lambda, S3, DynamoDB, Bedrock).
 
 ## Features
-- Daily quest + unlimited practice, adaptive difficulty (1–7), 500 topics
+- Daily quest + unlimited practice, adaptive difficulty (1–7), 76 prompts (196 topics with their variations)
 - In-app recording with planning countdown, timer and live transcript
 - Instant AI feedback (Claude) when signed in, or one-tap ChatGPT / Claude / Gemini
 - Optional sign-in (Google or email) with automatic backup and sync across devices
