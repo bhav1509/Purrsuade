@@ -4,6 +4,9 @@ Versions follow [Semantic Versioning](https://semver.org): MAJOR.MINOR.PATCH.
 PATCH = bug fixes, MINOR = new features, MAJOR = the 1.0.0 public launch (and later, big breaking changes).
 Every push to the live app gets a new version, shown in Settings → About. Publish with `scripts/release.sh`.
 
+## v1.0.2 · 2026-11-01
+- Fix: usage steps are recorded again
+
 ## v1.0.1 · 2026-11-01
 - Anonymous usage steps (no words, no account; can be turned off in Settings) and a one-time survey after the first quest; privacy policy updated
 

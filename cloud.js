@@ -140,7 +140,9 @@ const shareUsage=()=>{try{return !localStorage.getItem(NO_USAGE_KEY);}catch{retu
 function setShareUsage(on){try{if(on)localStorage.removeItem(NO_USAGE_KEY);else{localStorage.setItem(NO_USAGE_KEY,'1');evQueue=[];}}catch{}}
 let evQueue=[],evTimer=null;
 function track(name,detail){
-  if(!cloudOn()||!shareUsage()||location.hostname==='localhost')return;   // test runs on this computer aren't countedevQueue.push({n:name,t:Date.now(),...(detail!=null?{d:String(detail).slice(0,300)}:{})});
+  // Test runs on this computer (localhost) aren't counted.
+  if(!cloudOn()||!shareUsage()||location.hostname==='localhost')return;
+  evQueue.push({n:name,t:Date.now(),...(detail!=null?{d:String(detail).slice(0,300)}:{})});
   clearTimeout(evTimer);evTimer=setTimeout(flushEvents,2000);
 }
 // Plain text, so the browser sends it without an extra CORS check, and keepalive so it survives the page closing.
