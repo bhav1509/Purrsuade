@@ -1,5 +1,5 @@
 // Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
-const APP_VERSION='1.0.0';
+const APP_VERSION='1.0.1';
 const APP_RELEASED='2026-11-01';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
@@ -332,7 +332,7 @@ function cue(kind){const ac=audioCtx();if(!ac)return;const now=ac.currentTime;
 let wakeLock=null;
 async function keepAwake(on){try{if(on&&!wakeLock&&navigator.wakeLock){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>{wakeLock=null;});}else if(!on&&wakeLock){await wakeLock.release();wakeLock=null;}}catch{wakeLock=null;}}
 async function startSpeaking(){
-  audioCtx();keepAwake(true);
+  audioCtx();keepAwake(true);track('speak_start',transcriber());
   let stream=null;
   // Ask for the mic up front, so the permission prompt doesn't eat into speaking time (not needed for dictation).
   if(!dictating())try{stream=await navigator.mediaDevices.getUserMedia({audio:true});}
@@ -436,7 +436,7 @@ function tickRecorder(){
 // Stop both the recorder and recognition, wait (briefly) for their last results, then show the transcript.
 function stopRecording(){
   const r=rec;if(r.phase==='prep'){cancelSpeaking();return;}if(r.phase!=='rec'||!challenge)return;
-  r.phase='stopping';r.spoke=Math.round(recSeconds());cue('done');keepAwake(false);stopPcm(r);render();
+  r.phase='stopping';r.spoke=Math.round(recSeconds());track('speak_done',r.spoke);cue('done');keepAwake(false);stopPcm(r);render();
   const waits=[];
   if(r.sr&&!r.noSpeech)waits.push(new Promise(res=>{r.srDone=res;try{r.sr.stop();}catch{res();}setTimeout(res,1500);}));
   if(r.mr&&r.mr.state!=='inactive')waits.push(new Promise(res=>{r.mr.onstop=res;r.mr.stop();}));
@@ -546,8 +546,8 @@ async function getInstantFeedback(){
   if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}
   if(coachBusy)return;coachBusy=true;render();
   const guest=instantMode()==='guest';
-  try{const text=await instantFeedback();if(challenge){setFeedback(text);toast((SCORE_KEYS.every(k=>challenge.scores[k])?'Feedback added · scores filled in':'Feedback added')+(guest?' · that was your free try, sign in for more':''));}}
-  catch(e){toast(instantError(e));manualOpen=true;}
+  try{const text=await instantFeedback();track('feedback_instant',guest?'guest':'account');if(challenge){setFeedback(text);toast((SCORE_KEYS.every(k=>challenge.scores[k])?'Feedback added · scores filled in':'Feedback added')+(guest?' · that was your free try, sign in for more':''));}}
+  catch(e){track('feedback_failed',e.data?.error||e.status||'');toast(instantError(e));manualOpen=true;}
   finally{coachBusy=false;render();}
 }
 let manualOpen=false;
@@ -567,6 +567,7 @@ function stepCoach(){
     <div class="score-grid compact">${SCORE_KEYS.map(s=>`<label class="score-input${s==='overall'?' overall':''}"><span>${LABEL[s]}</span><input data-score="${s}" type="number" inputmode="decimal" min="1" max="10" step="0.5" value="${challenge.scores[s]||''}"></label>`).join('')}</div>
     ${got||coachBusy?'':'<button class="mini skip-feedback" id="skip-feedback">Skip feedback today and finish</button>'}`;}
 async function openAI(app){
+  track('feedback_ai_app',app);
   if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}
   state.coachApp=app;save();
   const prompt=coachPrompt();
@@ -615,6 +616,7 @@ function paintWheel(){
 }
 // Choose the topic first, then spin so the pointer lands on its category.
 function spin(rerolled){
+  track(rerolled?'reroll':'spin');
   // Pick a category from the unlocked range (the newest one a little more often), then a topic in it
   // whose base prompt hasn't come up in the last 20 sessions.
   const top=difficulty(),lo=Math.max(1,top-2),tiers=[];for(let t=lo;t<=top;t++)for(let w=0;w<(t===top?2:1);w++)tiers.push(t);
@@ -864,7 +866,8 @@ function settingsPanel(){return `
   ${installCard()}
   ${location.hash==='#debug'?`<section class="p-card"><h3>Test: skip time</h3><div class="settings">${[6,24,72].map(h=>`<button class="secondary" data-skip="${h}">+${h<24?h+' h':h/24+' d'}</button>`).join('')}</div></section>`:''}
   <section class="p-card"><h3>Help &amp; feedback</h3><p class="muted small">Found a bug or have an idea? It really helps.</p><div class="settings"><button class="primary" id="send-feedback">Send feedback</button><button class="secondary" id="replay-tour">Show the tour again</button></div></section>
-  <section class="p-card"><h3>Privacy</h3><p class="muted small">Without an account, everything stays on this device. If you sign in, your progress (cat, coins, journal with transcripts and feedback) is stored in your account on Amazon Web Services so you can restore it; recordings never leave this device. High-accuracy transcription runs on this device. Quick transcription uses your browser’s speech service (Chrome sends audio to Google). Your talk only goes to an AI when you ask for feedback: instant feedback sends it to Claude (through your account on AWS, or to Anthropic with your own key). <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p></section>
+  <section class="p-card"><h3>Privacy</h3><p class="muted small">Without an account, your progress stays on this device. If you sign in, your progress (cat, coins, journal with transcripts and feedback) is stored in your account on Amazon Web Services so you can restore it; recordings never leave this device. High-accuracy transcription runs on this device. Quick transcription uses your browser’s speech service (Chrome sends audio to Google). Your talk only goes to an AI when you ask for feedback: instant feedback sends it to Claude on AWS. <a href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>
+    <label class="toggle-row"><input type="checkbox" id="share-usage" ${shareUsage()?'checked':''}> <span>Share anonymous usage (which steps you reach, never what you say) to help improve Purrsuade</span></label></section>
   <section class="p-card"><h3>Backup</h3><p class="muted small">${signedIn()?'Your progress backs up to your account automatically. A file backup is extra safety.':'Progress lives on this device. Sign in or export a backup regularly.'}${state.lastBackup?` Last backup: ${longDate(ymd(new Date(state.lastBackup)))}.`:' No backup yet.'}</p><div class="settings"><button class="secondary" id="export">↓ Export</button><button class="secondary" id="import">↑ Import</button><button class="danger" id="reset">Reset</button></div></section>
   <section class="p-card about"><h3>About</h3><div class="about-row"><span>Purrsuade</span><b>Version ${APP_VERSION}</b></div><p class="muted small">Released ${longDate(APP_RELEASED)}${APP_VERSION.startsWith('0.')?' · test version (v1.0.0 will be the public launch)':''}</p></section>
 `;}
@@ -934,6 +937,7 @@ function bindPanel(){
   q('#instant-feedback')?.addEventListener('click',getInstantFeedback);
   q('.manual-coach')?.addEventListener('toggle',e=>{manualOpen=e.target.open;});
   qa('[data-sign-in]').forEach(b=>b.onclick=()=>cloudSignIn(b.dataset.signIn));
+  q('#share-usage')?.addEventListener('change',e=>{setShareUsage(e.target.checked);toast(e.target.checked?'Thanks! Sharing anonymous usage.':'Usage sharing turned off.');});
   q('#sign-out')?.addEventListener('click',()=>{if(confirm('Sign out? Your progress is saved in your account. This device starts a fresh room until you sign in again.'))cloudSignOut();});
   q('#delete-account')?.addEventListener('click',async e=>{
     if(!confirm('Delete your account? This removes your sign-in and the progress saved in your account. Progress on this device stays (use Reset to clear it). This cannot be undone.'))return;
@@ -986,7 +990,27 @@ function flagField(step,selector,msg){
   const clear=()=>{box.classList.remove('invalid');box.querySelector('.field-msg')?.remove();el.removeEventListener('pointerdown',clear);el.removeEventListener('input',clear);};
   el.addEventListener('pointerdown',clear);el.addEventListener('input',clear);setTimeout(clear,3500);
 }
-function completeQuest(skipFeedback){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!skipFeedback&&!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const lvBefore=level(),topBefore=difficulty(),daily=state.lastDaily!==today();let xp=daily?100:35;xp+=(skipFeedback?10:25+10)+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;if(skipFeedback)done.noFeedback=true;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();cloudSyncSoon();showResult(entry,lvBefore,topBefore);}
+function completeQuest(skipFeedback){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!skipFeedback&&!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const lvBefore=level(),topBefore=difficulty(),daily=state.lastDaily!==today();let xp=daily?100:35;xp+=(skipFeedback?10:25+10)+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;if(skipFeedback)done.noFeedback=true;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();cloudSyncSoon();showResult(entry,lvBefore,topBefore);
+  track('quest_done',skipFeedback?'no feedback':'feedback');
+  // After the first finished quest on this device, one short survey (once), when the result card closes.
+  if(!localStorage.getItem(SURVEY_KEY))document.querySelector('.result-shade [data-close]')?.addEventListener('click',()=>setTimeout(showSurvey,500));}
+// ---- One short survey after the first finished quest: how useful, would you pay, what would make it better ----
+const SURVEY_KEY='purrsuade-survey-1';
+function showSurvey(){
+  try{localStorage.setItem(SURVEY_KEY,'shown');}catch{}track('survey_shown');
+  const pick={useful:'',pay:''},opts=(k,list)=>`<div class="survey-opts" data-q="${k}">${list.map(([v,l])=>`<button class="secondary" data-v="${v}">${l}</button>`).join('')}</div>`;
+  showModal(`<h3>Quick question 🐱</h3><p class="muted small">It takes 10 seconds and really helps me make Purrsuade better.</p>
+    <p><b>How useful was this practice?</b></p>${opts('useful',[['1','1'],['2','2'],['3','3'],['4','4'],['5','5']])}<p class="muted small survey-ends"><span>Not useful</span><span>Very useful</span></p>
+    <p><b>Would you pay for it?</b></p>${opts('pay',[['no','No'],['2','$2 a month'],['5','$5 a month'],['10','$10+ a month']])}
+    <label class="survey-text">What would make it better? <span class="muted">(optional)</span><textarea id="survey-better" maxlength="280" rows="2"></textarea></label>
+    <div class="modal-foot"><button class="modal-later" data-no>Skip</button><button class="modal-ok" data-yes disabled>Send</button></div>`,sh=>{
+      sh.querySelectorAll('.survey-opts').forEach(g=>g.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+        g.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));pick[g.dataset.q]=b.dataset.v;
+        sh.querySelector('[data-yes]').disabled=!(pick.useful||pick.pay);}));
+      sh.querySelector('[data-no]').onclick=()=>{track('survey_skip');closeModal();};
+      sh.querySelector('[data-yes]').onclick=()=>{track('survey',JSON.stringify({...pick,better:sh.querySelector('#survey-better').value.trim()}));
+        try{localStorage.setItem(SURVEY_KEY,'answered');}catch{}closeModal();toast('Thank you! 💜');};});
+}
 function care(a){const c=state.cat;if(!c.alive){toast(`${c.name} cannot be cared for in this state.`);return;}const x=CARE_ACTIONS[a];if(!careGain(a)){toast(`${HUD.find(h=>h[1]===x.key)[0]} is already full.`);return;}if(state.coins<x.cost){toast('Not enough coins. Complete a speaking quest.');return;}state.coins-=x.cost;const before=c[x.key];c[x.key]=clamp(c[x.key]+x.gain,0,100);if(a==='food')c.happiness=clamp(c.happiness+5,0,100);if(a==='litter')c.happiness=clamp(c.happiness+4,0,100);if(healthOf(c)>=5)c.zeroSince=null;catReaction={type:a,started:performance.now()};persist();tourEvent('care');toast(x.msg(c.name));floatGain(`+${Math.round(c[x.key]-before)} ${HUD.find(h=>h[1]===x.key)[0]}`,a);}
 function exportData(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`purrsuade-backup-${today()}.json`;a.click();URL.revokeObjectURL(url);state.lastBackup=Date.now();save();toast('Backup exported.');}
 $('#import-file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.history||!d.cat)throw new Error();state=hydrate({...fresh(),...d});applyRoom(performance.now());save();cloudSyncSoon();panel=null;challenge=null;render();toast('Backup restored.');}catch{toast('That backup file is not valid.');}};r.readAsText(f);e.target.value='';});
@@ -1052,7 +1076,7 @@ function placeTour(){
 function tourEvent(name){const st=tour&&TOUR[tour.i];if(!st||st.wait!==name||tour.done)return;
   if(st.after){tour.done=true;setTimeout(()=>tour&&drawTourCard(),150);}else setTimeout(()=>tour&&tourGo(1),name==='quest'?0:700);}
 function endTour(finished){
-  if(!tour)return;cancelAnimationFrame(tour.frame);tour.shade.remove();tour.card.remove();tour=null;
+  if(!tour)return;track(finished?'tour_done':'tour_skip');cancelAnimationFrame(tour.frame);tour.shade.remove();tour.card.remove();tour=null;
   state.tourDone=true;save();if(finished)toast(`Have fun with ${state.cat.name}!`);
 }
 addEventListener('keydown',e=>{if(e.key==='Escape'&&tour)endTour(false);});
@@ -1163,3 +1187,4 @@ else roomAssetsReady.then(()=>setTimeout(dangerCheck,700),()=>{});
     setTimeout(()=>showModal(second?`<h3>Switched to dictation</h3><p>The app closed again while writing out your words. This phone seems short on memory for it.</p><p>From now on you’ll talk into the text box with your keyboard’s <b>microphone</b> (Apple’s / Google’s own dictation, very reliable). You can change this in Settings → Transcription.</p><div class="modal-foot"><button class="modal-ok" data-close>Got it</button></div>`
       :`<h3>The app closed</h3><p>It closed while writing out your words, maybe from running low on memory. Anything already written out is kept in your quest.</p><p>If it happens again, the app will switch to keyboard dictation for you.</p><div class="modal-foot"><button class="modal-ok" data-close>OK</button></div>`),900);}}}
 cloudBoot();
+deviceId();track('open',[newDevice||!state.history.length?'new':'returning',isPhone()?'phone':'computer',navigator.standalone||matchMedia('(display-mode: standalone)').matches?'app':'browser'].join(' '));

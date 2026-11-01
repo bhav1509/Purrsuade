@@ -5,6 +5,7 @@
 //   GET  /usage            → {remaining, limit}
 //   POST /coach            {topic, transcript, spokeSec, targetMin} → {text, remaining} | 429 when today's limit is used
 //   DELETE /account        → {deleted:true}: removes the saved progress (every version) and the sign-in
+//   POST /events           {device, signedIn, v, events:[{n, t, d}]} → {ok:true}: anonymous usage steps (no token)
 import { AnthropicBedrock, AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { S3Client, GetObjectCommand, PutObjectCommand, ListObjectVersionsCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
@@ -40,6 +41,10 @@ export async function handler(event) {
   if (event.body) {
     try { body = JSON.parse(event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString() : event.body); }
     catch { return json(400, { error: 'bad-json' }); }
+  }
+  if (path === '/events' && method === 'POST') {
+    try { return await saveEvents(body); }
+    catch (e) { console.error('events', e); return json(500, { error: 'server' }); }
   }
   const token = (event.headers?.authorization || '').replace(/^Bearer\s+/i, '');
   if (!token && path === '/coach' && method === 'POST') {
@@ -104,6 +109,32 @@ async function deleteAccount(user) {
   }
   await cognito.send(new AdminDeleteUserCommand({ UserPoolId: USER_POOL_ID, Username: user.username }));
   return json(200, { deleted: true });
+}
+
+// ---- Usage events: which steps people reach (never what they say), under a random ID per device ----
+// One item per device per day (EV#<day>#<device>), at most 500 events, deleted after 120 days.
+const EVENT_NAMES = new Set(['open', 'tour_done', 'tour_skip', 'spin', 'reroll', 'speak_start', 'speak_done', 'feedback_instant',
+  'feedback_failed', 'feedback_ai_app', 'quest_done', 'signin', 'survey_shown', 'survey', 'survey_skip']);
+async function saveEvents({ device, signedIn, v, events }) {
+  if (typeof device !== 'string' || !/^[\w-]{8,40}$/.test(device) || !Array.isArray(events) || !events.length || events.length > 50)
+    return json(400, { error: 'bad-events' });
+  const clean = events.filter(e => e && EVENT_NAMES.has(e.n)).map(e => ({ M: {
+    n: { S: e.n }, t: { N: String(Number.isFinite(+e.t) ? Math.round(+e.t) : Date.now()) },
+    ...(e.d != null ? { d: { S: String(e.d).slice(0, 300) } } : {}) } }));
+  if (!clean.length) return json(400, { error: 'bad-events' });
+  try {
+    await ddb.send(new UpdateItemCommand({
+      TableName: TABLE, Key: { pk: { S: `EV#${utcDay()}#${device}` } },
+      UpdateExpression: 'SET ev = list_append(if_not_exists(ev, :none), :new), signedIn = :s, v = :v, #ttl = if_not_exists(#ttl, :ttl)',
+      ConditionExpression: 'attribute_not_exists(ev) OR size(ev) < :max',
+      ExpressionAttributeNames: { '#ttl': 'ttl' },
+      ExpressionAttributeValues: { ':none': { L: [] }, ':new': { L: clean }, ':s': { BOOL: !!signedIn }, ':v': { S: String(v || '').slice(0, 20) },
+        ':max': { N: '500' }, ':ttl': { N: String(Math.floor(Date.now() / 1000) + 120 * 86400) } },
+    }));
+  } catch (e) {
+    if (e.name !== 'ConditionalCheckFailedException') throw e;   // over the day's cap: drop quietly
+  }
+  return json(200, { ok: true });
 }
 
 // ---- Built-in AI feedback, with a daily allowance per person and a shared daily cap ----

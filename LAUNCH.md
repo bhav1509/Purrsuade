@@ -12,17 +12,17 @@
 
 ## QA checklist (real devices)
 Run each on **iPhone Safari**, **iPhone installed app (Add to Home Screen)**, **Android Chrome** and **laptop Chrome**.
-- [ ] Fresh visit: tour, spin, speak (each transcription mode the device defaults to), feedback, complete quest.
-- [ ] Copy-paste feedback still works with ChatGPT and Claude.
-- [ ] Sign in with Google and with email, coming back to the app (**check this inside the installed iPhone app**,
+- [x] Fresh visit: tour, spin, speak (each transcription mode the device defaults to), feedback, complete quest.
+- [x] Copy-paste feedback still works with ChatGPT and Claude.
+- [x] Sign in with Google and with email, coming back to the app (**check this inside the installed iPhone app**,
       where sign-in pages can behave differently), instant feedback, "N left today" goes down, limit message at 0.
-- [ ] Existing local progress uploads on first sign-in. Clear site data, sign in again: the cat and journal come back.
-- [ ] Two devices: a session on one shows up on the other after reopening. Sessions on both while offline → the "which progress" choice.
+- [x] Existing local progress uploads on first sign-in. Clear site data, sign in again: the cat and journal come back.
+- [x] Two devices: a session on one shows up on the other after reopening (finished quests only; a half-done quest doesn't sync yet, see TODO). Sessions on both while offline → the "which progress" choice.
 - [ ] Offline: the app opens and practice works; instant feedback shows the offline message; changes sync once back online.
-- [ ] Sign out, then sign in as a different account on the same device.
-- [ ] Delete my account: sign-in removed, progress stays on the device, signing in again starts fresh.
-- [ ] Privacy policy link in Settings → Privacy opens and reads right.
-- [ ] Settings → About shows 1.0.0 after the launch release (and the offline cache refreshed).
+- [x] Sign out, then sign in as a different account on the same device.
+- [x] Delete my account: sign-in removed, progress stays on the device, signing in again starts fresh.
+- [x] Privacy policy link in Settings → Privacy opens and reads right.
+- [x] Settings → About shows 1.0.0 after the launch release (and the offline cache refreshed).
 
 ## Demo video (60–90 s, vertical 9:16 for LinkedIn, captions on)
 Record on a phone screen recorder (or the browser's device mode), with the room art on screen as much as possible.

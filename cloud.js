@@ -124,11 +124,34 @@ function resolveSync(remote,etag){
 async function cloudBoot(){
   if(!cloudOn())return;
   const back=await cloudFinishSignIn();
-  if(back){toast(`Signed in${accountEmail()?` as ${accountEmail()}`:''} · progress backs up automatically`);if(back.panel&&back.panel!==panel)setPanel(back.panel);else render();}
+  if(back){track('signin');toast(`Signed in${accountEmail()?` as ${accountEmail()}`:''} · progress backs up automatically`);if(back.panel&&back.panel!==panel)setPanel(back.panel);else render();}
   if(signedIn())cloudPull(true);
 }
 document.addEventListener('visibilitychange',()=>{if(!signedIn())return;if(document.hidden){if(syncMeta().dirty)cloudPush();}else cloudPull();});
 addEventListener('online',()=>{if(signedIn()&&syncMeta().dirty)cloudPush();});
+
+// ---- Usage events: which steps people reach, under a random ID for this device (no name, email or account, and
+// never what anyone says). Sent in small batches to POST /events; see the privacy policy. ----
+const DEVICE_KEY='purrsuade-device';let newDevice=false;
+const deviceId=()=>{try{let d=localStorage.getItem(DEVICE_KEY);if(!d){d=b64url(crypto.getRandomValues(new Uint8Array(12)));localStorage.setItem(DEVICE_KEY,d);newDevice=true;}return d;}catch{return 'none';}};
+// Settings → Privacy can turn it off (kept on this device).
+const NO_USAGE_KEY='purrsuade-no-usage';
+const shareUsage=()=>{try{return !localStorage.getItem(NO_USAGE_KEY);}catch{return false;}};
+function setShareUsage(on){try{if(on)localStorage.removeItem(NO_USAGE_KEY);else{localStorage.setItem(NO_USAGE_KEY,'1');evQueue=[];}}catch{}}
+let evQueue=[],evTimer=null;
+function track(name,detail){
+  if(!cloudOn()||!shareUsage()||location.hostname==='localhost')return;   // test runs on this computer aren't countedevQueue.push({n:name,t:Date.now(),...(detail!=null?{d:String(detail).slice(0,300)}:{})});
+  clearTimeout(evTimer);evTimer=setTimeout(flushEvents,2000);
+}
+// Plain text, so the browser sends it without an extra CORS check, and keepalive so it survives the page closing.
+function flushEvents(){
+  clearTimeout(evTimer);if(!evQueue.length||!cloudOn())return;
+  const body=JSON.stringify({device:deviceId(),signedIn:signedIn(),v:typeof APP_VERSION==='string'?APP_VERSION:'',events:evQueue.splice(0,50)});
+  fetch(CLOUD_CONFIG.api.replace(/\/$/,'')+'/events',{method:'POST',keepalive:true,headers:{'content-type':'text/plain'},body}).catch(()=>{});
+  if(evQueue.length)evTimer=setTimeout(flushEvents,500);
+}
+addEventListener('pagehide',flushEvents);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)flushEvents();});
 
 // ---- Instant AI feedback: through your account (a few free a day), or one free try on this device first ----
 const FREE_TRY_KEY='purrsuade-free-try-used';

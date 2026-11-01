@@ -23,8 +23,6 @@ launch (see "Launch week"), so the first testers' sessions before that won't be 
       laptop suite (58 checks) covers buying, placing, put away, wall decor, colours, room, coat, rename and old saves.
       Sync to a second device is still in the QA checklist below.
 - [x] **Release v0.3.0** with `scripts/release.sh minor "Shop: furniture, colours, room styles and coats"`.
-- [ ] ~~**Message 3–5 LinkedIn testers**~~ Skipped for lack of time (a ready-to-send message is in the chat history); the public post does this job.
-- [ ] Start device testing on my own phone: iPhone Safari, the installed iPhone app (sign-in is the biggest risk there).
 
 **Thu 29 Oct: build tracking and the feedback popups** → moved to launch week (not started)
 Goal: see where signed-in beta testers drop off, and whether the idea is worth charging for.
@@ -52,8 +50,9 @@ Goal: see where signed-in beta testers drop off, and whether the idea is worth c
       (opened → spun → spoke → finished speaking → feedback → quest done → came back → 3+ quests), a day 0–7 retention
       grid by start date, one row per user with where they stopped and a click-through timeline, survey answers and
       comments, and feature use (instant vs copy-paste, transcription mode, shop and cat care).
-- [ ] Full QA checklist in LAUNCH.md on iPhone Safari, the installed iPhone app, Android Chrome and laptop: sync between
-      two devices, offline, sign out/in, delete account, copy-paste with ChatGPT and Claude. (Events and popups once built.)
+- [x] Account checks by hand on launch day (iPhone + laptop): sync between two devices, sign out / sign in as another
+      account, delete account, privacy link: all as expected, except that a half-done quest doesn't sync (see the
+      next release). Offline not checked yet.
 - [ ] Fix what comes up (patch releases); read the testers' first data in the dashboard.
 - [x] **Clean up the UI.** Done over v0.3.1–v0.3.3: starter room, shop (two tabs, colour picker, wall decor),
       selection rings, the cat walking round furniture and using the cat tree / condo / teepee / box, garden, icons,
@@ -79,6 +78,24 @@ Goal: see where signed-in beta testers drop off, and whether the idea is worth c
 - [ ] `scripts/release.sh 1.0.0 "Public launch"`, then check the live site on a phone (Settings → About shows 1.0.0).
 - [ ] Post on LinkedIn with the video.
 - [ ] Watch CloudWatch logs and GitHub issues for the first day.
+
+**Next release (v1.0.1)**
+- [x] **Password reset works.** Checked on launch day: the earlier failure was an email address that had no account
+      (Cognito says a code was sent either way, so nobody can probe which emails exist). Google accounts have no
+      password to reset. Optional later: a "Signed up with Google? Use Continue with Google" hint on the sign-in card.
+- [ ] **Privacy policy: emailing users.** If I'll email people for feedback, add "We may occasionally email you about
+      Purrsuade; reply to opt out" before contacting anyone.
+- [ ] **Sign-up and activity script** (local, read-only, nothing with emails committed): sign-ups by day from Cognito
+      (Google vs email), and per account from the saved progress: sessions, days practised, last active. The launch
+      metric is "signed up → practised → came back", not sign-ups alone.
+- [ ] **Sync a quest in progress across devices.** A half-done session on the phone (topic, transcript, feedback so
+      far) doesn't show on the laptop; only finished quests sync. The in-progress quest is kept in its own slot on
+      the device (`QUEST_STORE`) and never uploaded. Fix: include it in the synced progress (not the recording), let
+      the newer copy win, and decide what happens if both devices have a different quest open (keep the newer one,
+      or ask).
+- [ ] **Check offline by hand:** the app opens and practice works; instant feedback shows the offline message;
+      changes sync once back online.
+- [ ] Tick off the launch-day items in this list.
 
 **Launch week (Mon 2 Nov →)**
 - [ ] **Usage tracking + feedback popups + `POST /events` + privacy policy update** (the Thu 29 Oct plan above), then

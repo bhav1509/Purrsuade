@@ -652,3 +652,14 @@ button.chip.level{border:0;font:inherit;cursor:pointer}
 .ask-thumb{display:block;width:96px;height:80px;margin:8px auto 0;image-rendering:pixelated;background:#18141f;box-shadow:0 0 0 3px #120e1b}
 .arrange-bar button{white-space:nowrap}
 .arrange-bar .done{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+
+/* ---- The one-time survey after the first finished quest ---- */
+.survey-opts{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:4px 0 6px}
+.survey-opts[data-q="pay"]{grid-template-columns:1fr 1fr}
+.modal .survey-opts button{width:auto;min-width:0;margin:0;padding:8px 6px;font-size:16px}
+.survey-opts button.on{color:#1d1830;background:var(--butter);box-shadow:inset 0 -3px 0 #c9ad5c}
+.survey-ends{display:flex;justify-content:space-between;margin-top:0}
+.survey-text{display:grid;gap:6px;margin-top:8px;font-size:16px}
+.survey-text textarea{width:100%;min-height:56px;font:inherit;font-size:16px}
+.toggle-row{display:flex;align-items:flex-start;gap:10px;margin-top:10px;font-size:16px;color:var(--muted);cursor:pointer}
+.toggle-row input{flex:none;width:20px;height:20px;margin-top:2px;accent-color:var(--mint)}
