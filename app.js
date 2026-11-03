@@ -1,6 +1,6 @@
 // Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
-const APP_VERSION='1.0.2';
-const APP_RELEASED='2026-11-01';
+const APP_VERSION='1.1.0';
+const APP_RELEASED='2026-11-03';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
 // Storage keys keep the original name so existing progress carries over after the rename.
@@ -289,7 +289,7 @@ function questPanel(){
   const st=Math.min(challenge.step||0,QUEST_STEPS.length-1);
   return `<div class="challenge"><div class="steps">${QUEST_STEPS.map((l,i)=>`<button data-step="${i}" class="${i===st?'active':''}${i<st?' done':''}"><b>${i+1}</b>${l}</button>`).join('')}</div>
   <div class="step-body">${[stepTopic,stepSpeak,stepCoach][Math.min(st,2)]()}</div>
-  <div class="step-foot">${st?`<button class="secondary" data-step="${st-1}">← Back</button>`:''}${st===0?`<button class="primary" id="go-speak">I’m ready · start speaking →</button>`:st===1?`<button class="primary" data-step="2" ${recActive()||rec.whisper?'disabled':''}>Get feedback →</button>`:'<button class="primary" id="complete">Complete quest ✨</button>'}</div></div>`;
+  <div class="step-foot">${st?`<button class="secondary" data-step="${st-1}">← Back</button>`:''}${st===0?`<button class="primary" id="go-speak">I’m ready · start speaking →</button>`:st===1?`<button class="primary" data-step="2" ${recActive()||rec.whisper||rec.phase==='mic'?'disabled':''}>Get feedback →</button>`:'<button class="primary" id="complete">Complete quest ✨</button>'}</div></div>`;
 }
 function stepTopic(){const tier=WHEEL_TIERS[challenge.difficulty-1];return `<div class="topic-box" style="--tier:${tier[1]}"><span>${tier[0].toUpperCase()} · DIFFICULTY ${challenge.difficulty}/7</span><h3>${challenge.topic}</h3><div class="chips"><b><i class="px-icon brain" aria-hidden="true"></i>${prep()}s prep</b><b><i class="px-icon mic light" aria-hidden="true"></i>${state.duration} min target</b></div></div>${!challenge.rerolled?'<button class="secondary" id="reroll">↻ Use free reroll</button>':''}<p class="muted">Take ${prep()} seconds to prepare, then speak for about ${state.duration} minutes. Transcribe it for the next step.</p>`;}
 // Big countdown digits drawn as pixels (the font's "1" has a flag that reads like a stray line).
@@ -334,9 +334,13 @@ async function keepAwake(on){try{if(on&&!wakeLock&&navigator.wakeLock){wakeLock=
 async function startSpeaking(){
   audioCtx();keepAwake(true);track('speak_start',transcriber());
   let stream=null;
-  // Ask for the mic up front, so the permission prompt doesn't eat into speaking time (not needed for dictation).
-  if(!dictating())try{stream=await navigator.mediaDevices.getUserMedia({audio:true});}
-  catch{toast('The microphone is blocked. You can type or paste your transcript instead.');rec={phase:'done'};render();return;}
+  // Ask for the mic up front, so the permission prompt doesn't eat into planning or speaking time (not needed for
+  // dictation).
+  if(!dictating()){const q=challenge;rec={phase:'mic'};render();
+    try{stream=await navigator.mediaDevices.getUserMedia({audio:true});}
+    catch{toast('The microphone is blocked. You can type or paste your transcript instead.');rec={phase:'done'};render();return;}
+    // Rerolled or closed while the browser was asking: let the mic go again.
+    if(challenge!==q||rec.phase!=='mic'||panel!=='quest'){stream.getTracks().forEach(t=>t.stop());if(rec.phase==='mic')rec={phase:'idle'};return;}}
   rec={phase:'prep',stream,prepEnd:Date.now()+prep()*1000};
   if(useWhisper()&&stream)whisperCall('load',{model:whisperModel()}).catch(()=>{});
   clearInterval(recTick);recTick=setInterval(tickRecorder,250);render();
@@ -422,11 +426,15 @@ function startRecognition(r){
   try{sr.start();r.sr=sr;}catch{r.noSpeech=true;}
 }
 function showLive(){const el=$('#live-text');if(!el)return;el.innerHTML=`${esc(rec.final)} <i>${esc(rec.interim)}</i>`;el.scrollTop=el.scrollHeight;}
+// Planning can be paused (the countdown holds the seconds left) and picked up again.
+function pausePrep(){if(rec.phase!=='prep')return;if(rec.paused){rec.prepEnd=Date.now()+rec.left;rec.paused=false;}else{rec.left=Math.max(0,rec.prepEnd-Date.now());rec.paused=true;}render();}
 function tickRecorder(){
-  if(rec.phase==='prep'){const left=Math.ceil((rec.prepEnd-Date.now())/1000);if(left<=0){beginRecording();return;}const el=$('#prep-count');if(el&&el.dataset.n!=String(left)){el.dataset.n=left;el.innerHTML=pixelNumber(left);}}
+  if(rec.phase==='prep'){if(rec.paused)return;const left=Math.ceil((rec.prepEnd-Date.now())/1000);if(left<=0){beginRecording();return;}const el=$('#prep-count');if(el&&el.dataset.n!=String(left)){el.dataset.n=left;el.innerHTML=pixelNumber(left);}}
   else if(rec.phase==='rec'){const s=recSeconds(),target=state.duration*60;
-    const lv=$('#mic-level');if(lv){let v=0;if(rec.an){rec.an.getFloatTimeDomainData(rec.lvl);let sum=0;for(const x of rec.lvl)sum+=x*x;v=Math.min(1,Math.sqrt(sum/rec.lvl.length)*6);}else v=rec.hearing?.6+Math.random()*.3:0;
-      rec.level=Math.max(v,(rec.level||0)*.8);lv.style.width=`${Math.round(rec.level*100)}%`;}
+    let v=0;if(rec.an){rec.an.getFloatTimeDomainData(rec.lvl);let sum=0;for(const x of rec.lvl)sum+=x*x;const rms=Math.sqrt(sum/rec.lvl.length);v=Math.min(1,rms*6);
+      // When the voice was first and last heard, so the silence before and after the talk doesn't count as speaking.
+      if(rms>.02){rec.voiceFirst??=s;rec.voiceLast=s;}}else v=rec.hearing?.6+Math.random()*.3:0;
+    const lv=$('#mic-level');if(lv){rec.level=Math.max(v,(rec.level||0)*.8);lv.style.width=`${Math.round(rec.level*100)}%`;}
     const c=$('#rec-clock');if(c)c.textContent=`${mmss(s)} / ${mmss(target)}`;
     const b=$('#rec-bar');if(b){b.firstElementChild.style.width=`${Math.min(100,s/target*100)}%`;b.classList.toggle('reached',s>=target);}
     if(s>=target-15&&!rec.warned){rec.warned=true;cue('warn');}
@@ -436,7 +444,10 @@ function tickRecorder(){
 // Stop both the recorder and recognition, wait (briefly) for their last results, then show the transcript.
 function stopRecording(){
   const r=rec;if(r.phase==='prep'){cancelSpeaking();return;}if(r.phase!=='rec'||!challenge)return;
-  r.phase='stopping';r.spoke=Math.round(recSeconds());track('speak_done',r.spoke);cue('done');keepAwake(false);stopPcm(r);render();
+  // Speaking time runs from the first to the last moment the mic heard a voice (with a little margin); without a
+  // level to go by (keyboard dictation, some phones) it's the whole recording.
+  const total=recSeconds(),voiced=r.voiceFirst!=null?Math.min(total,r.voiceLast+.5)-Math.max(0,r.voiceFirst-.5):0;
+  r.phase='stopping';r.spoke=Math.round(voiced>=3?voiced:total);track('speak_done',r.spoke);cue('done');keepAwake(false);stopPcm(r);render();
   const waits=[];
   if(r.sr&&!r.noSpeech)waits.push(new Promise(res=>{r.srDone=res;try{r.sr.stop();}catch{res();}setTimeout(res,1500);}));
   if(r.mr&&r.mr.state!=='inactive')waits.push(new Promise(res=>{r.mr.onstop=res;r.mr.stop();}));
@@ -454,9 +465,12 @@ function stopRecording(){
 function cancelSpeaking(){keepAwake(false);try{rec.pcm&&(rec.pcm.proc.disconnect(),rec.pcm.mute.disconnect());}catch{}markWhisper(null);try{rec.src?.disconnect();}catch{}try{rec.sr&&(rec.sr.onend=null,rec.sr.abort());}catch{}try{rec.mr?.state!=='inactive'&&rec.mr?.stop();}catch{}rec.stream?.getTracks().forEach(t=>t.stop());resetRecorder();render();}
 function stepSpeak(){
   const target=state.duration*60;
-  if(rec.phase==='prep'){const left=Math.max(1,Math.ceil((rec.prepEnd-Date.now())/1000));return `<div class="speak-stage">
-    <span class="eyebrow">PLAN</span><b class="big-count" id="prep-count" data-n="${left}" aria-label="${left} seconds">${pixelNumber(left)}</b><p class="speak-topic">${esc(challenge.topic)}</p>
-    <div class="speak-actions"><button class="secondary" id="rec-cancel">Cancel</button><button class="primary" id="rec-now">Start speaking now</button></div></div>`;}
+  if(rec.phase==='mic')return `<div class="speak-stage"><i class="px-icon mic light big" aria-hidden="true"></i><h3>Getting the microphone ready…</h3><p class="speak-topic">${esc(challenge.topic)}</p><p class="muted small">If your browser asks, allow the microphone. Planning starts right after.</p></div>`;
+  if(rec.phase==='prep'){const left=Math.max(1,Math.ceil(((rec.paused?rec.left:rec.prepEnd-Date.now()))/1000)),tier=WHEEL_TIERS[challenge.difficulty-1];return `<div class="speak-stage${rec.paused?' paused':''}">
+    <span class="eyebrow">${rec.paused?'PAUSED':'PLAN YOUR TALK'}</span><b class="big-count" id="prep-count" data-n="${left}" aria-label="${left} seconds">${pixelNumber(left)}</b>
+    <span class="speak-tier" style="--tier:${tier[1]}">${tier[0].toUpperCase()} · DIFFICULTY ${challenge.difficulty}/7</span><p class="speak-topic">${esc(challenge.topic)}</p>
+    <div class="speak-actions"><button class="secondary" id="prep-pause">${rec.paused?'▶ Resume':'❚❚ Pause'}</button><button class="primary" id="rec-now">Start speaking now</button></div>
+    ${!challenge.rerolled?'<button class="mini" id="prep-reroll">↻ Use free reroll</button>':''}</div>`;}
   if(rec.phase==='rec'||rec.phase==='stopping'){const s=recSeconds();return `<div class="speak-stage live">
     <div class="rec-head"><span class="rec-dot"></span>${rec.phase==='stopping'?'Finishing…':'Recording'}<span class="mic-meter" title="Microphone level"><i id="mic-level"></i></span><b id="rec-clock">${mmss(s)} / ${mmss(target)}</b></div>
     <div class="bar rec-bar${s>=target?' reached':''}" id="rec-bar"><i style="width:${Math.min(100,s/target*100)}%"></i></div>
@@ -512,10 +526,19 @@ async function prepareWhisper(btn){
 
 // ---- Coach: send the transcript to any chat AI, paste the reply back, scores fill themselves in ----
 const SCORE_KEYS=[...SKILLS,'overall'];
+// Speaking pace, worked out the same way everywhere (the prompt, the feedback screen, the journal), so the numbers
+// never disagree: words per minute and where that sits against the comfortable 130–160. Null without a time.
+// Keep in step with paceOf() in cloud/src/coach-prompt.mjs.
+const PACE_BANDS=[[100,'Slow'],[130,'A little slow'],[161,'Comfortable'],[181,'A little fast'],[Infinity,'Fast']];
+function paceOf(transcript='',sec=0){
+  const words=transcript.trim().split(/\s+/).filter(Boolean).length;if(!sec||!words)return null;
+  const wpm=Math.round(words/(sec/60));return {words,sec,wpm,label:PACE_BANDS.find(([max])=>wpm<max)[1],short:sec<20||words<40};
+}
 function coachPrompt(){
-  const words=challenge.transcript.trim().split(/\s+/).filter(Boolean).length,sec=challenge.spokeSec||0;
-  const timing=sec?`SPEAKING TIME: ${mmss(sec)} (target: about ${state.duration} min) · roughly ${Math.round(words/(sec/60))} words per minute`:`TARGET LENGTH: about ${state.duration} min (actual time not recorded)`;
-  return `You are my friendly but honest communication mentor. I am practicing speaking, not writing. The transcript below was captured by speech recognition, so ignore small transcription errors.\n\nScore each from 1–10: Clarity, Structure, Confidence, Vocabulary, Conciseness, Grammar, Overall.\n\nThen give:\n1. Three specific strengths\n2. Three specific improvements\n3. Timing and pace: did my length suit the target, and was my pace comfortable to listen to (around 130–160 words per minute is typical)?\n4. A stronger structure I could have used\n5. A short improved example answer\n6. One focus for my next speaking session\n\nDo not overpraise me. Be encouraging, concrete and concise.\n\nFinish your reply with these two sections as plain text (no headings, bold or other formatting), exactly in this format:\nKEY POINTS:\n- 3 to 5 bullet points, each under 15 words: the most important takeaways\nSCORES: clarity=X; structure=X; confidence=X; vocabulary=X; conciseness=X; grammar=X; overall=X\n\nTOPIC:\n${challenge.topic}\n\n${timing}\n\nTRANSCRIPT:\n${challenge.transcript}`;}
+  const p=paceOf(challenge.transcript,challenge.spokeSec),target=state.duration;
+  const timing=p?`SPEAKING TIME: ${mmss(p.sec)} (target: about ${target} min)\nPACE: ${p.wpm} words per minute (${p.words} words), which counts as "${p.label.toLowerCase()}" (comfortable is 130–160)${p.short?'. The talk was very short, so the pace is only a rough guide':''}.\nThe app measured these. Use these exact numbers and this pace verdict; don't recalculate them.`
+    :`TARGET LENGTH: about ${target} min (the actual time wasn't recorded, so don't comment on pace)`;
+  return `You are my friendly but honest communication mentor. I am practicing speaking, not writing. The transcript below was captured by speech recognition, so ignore small transcription errors.\n\nScore each from 1–10: Clarity, Structure, Confidence, Vocabulary, Conciseness, Grammar, Overall.\n\nThen give these six sections, each starting with its heading on its own line, written exactly like this:\n## Strengths\nThree specific strengths, as "- " bullet points.\n## Improvements\nThree specific improvements, as "- " bullet points.\n## Timing and pace\nDid my length suit the target? Was the pace given below comfortable to listen to? One or two "- " bullet points.\n## A stronger structure\nThe structure I could have used, as short "- " bullet points.\n## Example answer\nA short improved example answer, as one paragraph.\n## Next focus\nOne focus for my next speaking session, in one sentence.\n\nNo title, no tables and no list of scores before the sections. Do not overpraise me. Be encouraging, concrete and concise.\n\nFinish your reply with these two sections as plain text (no headings, bold or other formatting), exactly in this format:\nKEY POINTS:\n- 3 to 5 bullet points, each under 15 words: the most important takeaways\nSCORES: clarity=X; structure=X; confidence=X; vocabulary=X; conciseness=X; grammar=X; overall=X\n\nTOPIC:\n${challenge.topic}\n\n${timing}\n\nTRANSCRIPT:\n${challenge.transcript}`;}
 // Reads scores from the reply: the SCORES line if present, otherwise lines like "Clarity: 7", "Clarity 7/10" or "| Clarity | 7/10 |".
 function parseScores(text){
   const out={},line=[...text.matchAll(/SCORES:[*\s]*?([^\n]*\d[^\n]*)/gi)].pop()?.[1];
@@ -533,14 +556,17 @@ const AI_APPS=[['chatgpt','ChatGPT','https://chatgpt.com/?q='],['claude','Claude
 let coachBusy=false;
 function instantCard(got){
   const mode=instantMode();
+  // While the AI writes: a moving bar and a busy button, so it's clear something is happening.
+  if(coachBusy)return `<div class="instant-card busy" role="status"><div><h4>Getting your feedback…</h4><p class="muted small">${esc(state.cat.name)} is reading your talk. This takes about 10–30 seconds.</p></div>
+    <div class="bar loading-bar" aria-hidden="true"><i></i></div><button class="primary" disabled><span class="px-dots" aria-hidden="true"><i></i><i></i><i></i></span>Getting feedback</button></div>`;
   // Not signed in: an invitation to sign in (instant feedback only comes with an account).
   if(!mode)return cloudOn()?`<div class="instant-card"><div><h4>✨ Instant feedback</h4><p class="muted small">Skip the copy and paste: <b>sign in</b> for ${coachLeft??'a few'} free AI feedbacks a day.</p></div>
     <div class="instant-actions">${CLOUD_CONFIG.google?'<button class="primary" data-sign-in="Google">Continue with Google</button>':''}<button class="${CLOUD_CONFIG.google?'secondary':'primary'}" data-sign-in="">Sign in with email</button></div></div>`:'';
-  if(mode==='guest')return `<div class="instant-card"><div><h4>✨ Instant feedback · free try</h4><p class="muted small">${coachBusy?`${esc(state.cat.name)} is reading your talk… about 10–30 seconds.`:'Try it once without an account: the AI reads your talk and fills in the feedback and scores. Sign in for more every day.'}</p></div>
-    <button class="primary" id="instant-feedback" ${coachBusy?'disabled':''}>${coachBusy?'Getting feedback…':'Get feedback'}</button></div>`;
+  if(mode==='guest')return `<div class="instant-card"><div><h4>✨ Instant feedback · free try</h4><p class="muted small">Try it once without an account: the AI reads your talk and fills in the feedback and scores. Sign in for more every day.</p></div>
+    <button class="primary" id="instant-feedback">Get feedback</button></div>`;
   const left=coachLeft!=null?` · ${coachLeft} left today`:'';
-  return `<div class="instant-card${got?' done':''}"><div><h4>${got?'Feedback added ✓':'✨ Instant feedback'}</h4><p class="muted small">${coachBusy?`${esc(state.cat.name)} is reading your talk… about 10–30 seconds.`:`The AI reads your talk and fills in the feedback and scores${left}.`}</p></div>
-    <button class="${got?'secondary':'primary'}" id="instant-feedback" ${coachBusy||(coachLeft===0)?'disabled':''}>${coachBusy?'Getting feedback…':got?'Get new feedback':coachLeft===0?'None left today':'Get feedback'}</button></div>`;
+  return `<div class="instant-card${got?' done':''}"><div><h4>${got?'Feedback added ✓':'✨ Instant feedback'}</h4><p class="muted small">The AI reads your talk and fills in the feedback and scores${left}.</p></div>
+    <button class="${got?'secondary':'primary'}" id="instant-feedback" ${coachLeft===0?'disabled':''}>${got?'Get new feedback':coachLeft===0?'None left today':'Get feedback'}</button></div>`;
 }
 async function getInstantFeedback(){
   if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript first');return;}
@@ -550,10 +576,21 @@ async function getInstantFeedback(){
   catch(e){track('feedback_failed',e.data?.error||e.status||'');toast(instantError(e));manualOpen=true;}
   finally{coachBusy=false;render();}
 }
+// The measured pace as a pixel gauge: words per minute in big digits, its band, and the comfortable 130–160 zone.
+function paceCard(transcript,sec,target){
+  const p=paceOf(transcript,sec);if(!p)return '';const at=v=>clamp((v-60)/160*100,0,100);
+  return `<div class="pace-card${p.label==='Comfortable'?' ok':''}"><div class="pace-num">${pixelNumber(p.wpm)}<span>words a minute</span></div>
+    <div class="pace-info"><b>${p.label} pace</b><span>${mmss(p.sec)} spoken${target?` · target ${target} min`:''} · ${p.words} words</span>
+      <div class="pace-gauge" aria-hidden="true"><i class="zone" style="left:${at(130)}%;width:${at(161)-at(130)}%"></i><i class="mark" style="left:${at(p.wpm)}%"></i></div>
+      <span class="pace-scale"><em>Slow</em><em>130–160</em><em>Fast</em></span>${p.short?'<small>A very short talk, so this is a rough guide.</small>':''}</div></div>`;
+}
+// Once the instant feedback is in: the pace and the key points, so there's something to read before finishing.
+function feedbackPreview(){const kp=challenge.keyPoints?.length?challenge.keyPoints:parseKeyPoints(challenge.feedback);
+  return `${paceCard(challenge.transcript,challenge.spokeSec,state.duration)}${kp.length?`<div class="result-kp"><b>Key points</b><ul>${kp.map(k=>`<li>${esc(k)}</li>`).join('')}</ul></div>`:''}`;}
 let manualOpen=false;
 function stepCoach(){
   const fav=state.coachApp,apps=fav?[...AI_APPS.filter(a=>a[0]===fav),...AI_APPS.filter(a=>a[0]!==fav)]:AI_APPS,got=!!challenge.feedback.trim(),instant=!!instantMode();
-  return `${instantCard(got)}
+  return `${instantCard(got)}${got&&!coachBusy?feedbackPreview():''}
     ${instant?`<details class="manual-coach"${manualOpen?' open':''}><summary>Or use your own AI app (ChatGPT, Claude, Gemini)</summary>`:''}<div class="coach-step${got?' done':''}"><b class="num">1</b><div class="cs-body"><h4>Send your talk to an AI helper</h4>
       <p class="muted small">Tap your app. Your talk is copied and the app opens with it${fav&&fav!=='gemini'&&fav!=='other'?' already typed in':''}. Just press send.</p>
       <div class="ai-apps">${apps.map(([k,l],i)=>`<button class="${i===0&&fav?'primary':'secondary'}" data-ai="${k}">${i===0&&fav?'★ ':''}${l}</button>`).join('')}</div></div></div>
@@ -617,6 +654,9 @@ function paintWheel(){
 // Choose the topic first, then spin so the pointer lands on its category.
 function spin(rerolled){
   track(rerolled?'reroll':'spin');
+  // Unlock sound and the mic's audio now, inside the tap: planning starts by itself when the wheel stops, and phones
+  // keep audio started outside a tap silent (the transcript would come out empty).
+  audioCtx();
   // Pick a category from the unlocked range (the newest one a little more often), then a topic in it
   // whose base prompt hasn't come up in the last 20 sessions.
   const top=difficulty(),lo=Math.max(1,top-2),tiers=[];for(let t=lo;t<=top;t++)for(let w=0;w<(t===top?2:1);w++)tiers.push(t);
@@ -637,8 +677,10 @@ function spin(rerolled){
 }
 function startChallenge(p,rerolled){
   wheel={rot:wheel.rot,spinning:false};resetRecorder();
-  challenge={topic:p.t,difficulty:p.d,rerolled,date:today(),daily:state.lastDaily!==today(),transcript:'',feedback:'',scores:{clarity:0,structure:0,confidence:0,vocabulary:0,conciseness:0,grammar:0,overall:0},self:{confidence:5,fluency:5,satisfaction:5},step:0};
-  render();
+  // Planning starts straight away (with the quest open); a topic revealed while it was closed waits on its card.
+  const now=panel==='quest';
+  challenge={topic:p.t,difficulty:p.d,rerolled,date:today(),daily:state.lastDaily!==today(),transcript:'',feedback:'',scores:{clarity:0,structure:0,confidence:0,vocabulary:0,conciseness:0,grammar:0,overall:0},self:{confidence:5,fluency:5,satisfaction:5},step:now?1:0};
+  if(now)startSpeaking();else render();
 }
 
 // ---- Progress ----
@@ -663,7 +705,7 @@ function journalPanel(){
   return `${cal}<div class="hist-list"><div class="hist-rows">${rows.map(h=>`<button class="hist-row" data-hist="${h.id}"><span><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><b>${esc(h.topic)}</b></span><span class="score${h.incomplete||!h.scores.overall?' inc':''}">${h.incomplete||!h.scores.overall?'—':h.scores.overall}</span></button>`).join('')}</div>
   <div class="pager"><button class="secondary" data-hist-page="-1" ${histPage?'':'disabled'}>←</button><span>${histPage+1} / ${pages}</span><button class="secondary" data-hist-page="1" ${histPage<pages-1?'':'disabled'}>→</button></div></div>`;
 }
-function histDetail(h){return `<div class="hist-detail"><div class="detail-head"><button class="mini back" data-hist-back>← All sessions</button><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><h3>${esc(h.topic)}</h3><div class="chips"><b>🎯 ${h.scores.overall||'—'}/10</b><b>⭐ +${h.earnedXP} XP</b><b>${COIN}+${h.earnedCoins}</b><b><i class="px-icon mic light" aria-hidden="true"></i>${h.spokeSec?mmss(h.spokeSec):h.duration+' min'}</b></div><div class="score-chips">${SKILLS.map(s=>`<span>${LABEL[s]} <b>${h.scores[s]||'—'}</b></span>`).join('')}</div></div>${(()=>{const kp=h.keyPoints?.length?h.keyPoints:parseKeyPoints(h.feedback);
+function histDetail(h){return `<div class="hist-detail"><div class="detail-head"><button class="mini back" data-hist-back>← All sessions</button><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><h3>${esc(h.topic)}</h3><div class="chips"><b>🎯 ${h.scores.overall||'—'}/10</b><b>⭐ +${h.earnedXP} XP</b><b>${COIN}+${h.earnedCoins}</b><b><i class="px-icon mic light" aria-hidden="true"></i>${h.spokeSec?mmss(h.spokeSec):h.duration+' min'}</b></div><div class="score-chips">${SKILLS.map(s=>`<span>${LABEL[s]} <b>${h.scores[s]||'—'}</b></span>`).join('')}</div></div>${paceCard(h.transcript,h.spokeSec,h.duration)}${(()=>{const kp=h.keyPoints?.length?h.keyPoints:parseKeyPoints(h.feedback);
     return kp.length?`<div class="detail-text key-points"><h4>Key points</h4><ul>${kp.map(p=>`<li>${esc(p)}</li>`).join('')}</ul><details><summary>Full AI feedback</summary><div class="fb">${feedbackHtml(h.feedback)}</div></details></div>`
       :`<div class="detail-text"><h4>AI feedback</h4>${h.feedback?`<div class="fb">${feedbackHtml(h.feedback)}</div>`:'<p class="pre">No feedback saved.</p>'}</div>`;})()}<div class="detail-text"><h4>Transcript</h4><p class="pre">${esc(h.transcript||'No transcript saved.')}</p></div></div>`;}
 // This month at a glance: days with a completed daily quest are filled in.
@@ -911,8 +953,12 @@ function bind(){
   const room=$('#room-canvas');
   if(room){
     const redrawStill=()=>{}; // the animation loop redraws every frame
-    const pet=e=>{if(!state.cat.alive||!catHit(room,e.clientX,e.clientY))return;
-      catReaction={type:'pet',started:performance.now()};floatGain('♥','pet');tourEvent('pet');};
+    // A tap on the cat pets it; a tap on furniture sends the cat over to use it.
+    const pet=e=>{if(!state.cat.alive)return;
+      if(catHit(room,e.clientX,e.clientY)){catReaction={type:'pet',started:performance.now()};floatGain('♥','pet');tourEvent('pet');return;}
+      const steps=visitSteps(room,e.clientX,e.clientY);if(!steps)return;
+      if(healthOf(state.cat)<15){toast(`${state.cat.name} is too weak to get up. Care for them first.`);return;}
+      catReaction={type:'visit',steps,started:performance.now()};};
     // Arrange mode: presses on furniture drag it instead of panning; the layout is saved on drop.
     const grab=e=>arrange.on?grabItem(room,e,{onMove:redrawStill,onDrop:(layout,id,stuck)=>{state.layout=layout;setRoomLayout(layout,performance.now());save();refreshArrangeBar();
       if(stuck)toast(wallItems.some(w=>w.id===id)?'No room on that wall. Move or put away something there first.':'That spot is taken, so it stayed where it was.');}}):null;
@@ -924,13 +970,17 @@ function bindPanel(){
   const p=$('.panel');if(!p)return;const q=s=>p.querySelector(s),qa=s=>p.querySelectorAll(s);
   qa('[data-panel-tab]').forEach(b=>b.onclick=()=>{panel=null;setPanel(b.dataset.panelTab);});
   q('[data-panel-close]')?.addEventListener('click',()=>setPanel(null));
-  qa('[data-step]').forEach(b=>b.onclick=()=>{if(recActive())stopRecording();challenge.step=+b.dataset.step;render();if(challenge.step===2)refreshCoachLeft();});
+  qa('[data-step]').forEach(b=>b.onclick=()=>{if(recActive())stopRecording();const from=challenge.step;challenge.step=+b.dataset.step;render();
+    if(challenge.step!==2)return;refreshCoachLeft();
+    // "Get feedback →" asks the AI straight away when instant feedback is available.
+    if(from===1&&instantMode()&&coachLeft!==0&&!coachBusy&&!challenge.feedback.trim()&&challenge.transcript.trim())getInstantFeedback();});
   qa('[data-hist]').forEach(b=>b.onclick=()=>{histSel=+b.dataset.hist;render();});
   qa('[data-hist-page]').forEach(b=>b.onclick=()=>{histPage+=+b.dataset.histPage;render();});
   q('[data-hist-back]')?.addEventListener('click',()=>{histSel=null;render();});
   q('#spin')?.addEventListener('click',()=>spin(false)); q('#reroll')?.addEventListener('click',()=>spin(true));
   q('#transcript')?.addEventListener('input',e=>{challenge.transcript=e.target.value;saveQuest();}); q('#feedback')?.addEventListener('input',e=>setFeedback(e.target.value)); q('#feedback')?.addEventListener('paste',()=>setTimeout(render,50));
   q('#rec-start')?.addEventListener('click',startSpeaking);q('#rec-now')?.addEventListener('click',beginRecording);q('#rec-cancel')?.addEventListener('click',cancelSpeaking);
+  q('#prep-pause')?.addEventListener('click',pausePrep);q('#prep-reroll')?.addEventListener('click',()=>{cancelSpeaking();spin(true);});
   q('#rec-stop')?.addEventListener('click',stopRecording);
   q('#rec-again')?.addEventListener('click',()=>{if(challenge.transcript.trim()&&!confirm('Record again? This replaces the current transcript.'))return;resetRecorder();challenge.transcript='';challenge.spokeSec=0;startSpeaking();});
   qa('[data-ai]').forEach(b=>b.onclick=()=>openAI(b.dataset.ai));
@@ -1101,20 +1151,35 @@ function showResult(h,lvBefore,topBefore){
     ${up?`<p class="result-up">Level up! You’re now <b>Lv ${lv} · ${title()}</b>${top>topBefore?`<br>New topics unlocked: <b>${WHEEL_TIERS[top-1][0]}</b>`:''}</p>`:''}
     <div class="result-level"><span>Lv ${lv} · ${title()}</span><span>${state.xp%500}/500 XP</span></div><div class="bar result-bar"><i style="width:${(state.xp%500)/5}%"></i></div>
     ${o?`<div class="result-scores">${SKILLS.map(s=>`<span>${LABEL[s]}<b>${h.scores[s]||'—'}</b></span>`).join('')}</div>`:''}
+    ${paceCard(h.transcript,h.spokeSec,h.duration)}
     ${kp.length?`<div class="result-kp"><b>Remember next time</b><ul>${kp.map(k=>`<li>${esc(k)}</li>`).join('')}</ul></div>`:''}
     ${full?`<div class="result-feedback"><h4>Full feedback</h4><div class="fb">${full}</div></div>`:''}
     </div><div class="modal-foot result-foot"><button class="modal-ok" data-close>Back to ${esc(state.cat.name)}</button></div>`,null,'result');
 }
-// The AI's reply as tidy HTML: headings, lists, bold and italics. KEY POINTS and SCORES are shown on their own,
-// so they're left out here.
+// The six parts of the feedback, under the same short names whatever words the AI used for them ("Three specific
+// strengths", "**3. Timing and pace**", "## Improved Example Answer"…). Example comes first: "improved example".
+const SECTIONS=[[/example/i,'Example answer'],[/strength/i,'Strengths'],[/improve/i,'Improvements'],[/timing|pace/i,'Timing and pace'],[/structure/i,'A stronger structure'],[/focus|next (time|session)/i,'Next focus']];
+const sectionOf=s=>SECTIONS.find(([re])=>re.test(s))?.[1];
+// The AI's reply as tidy HTML: the section headings, lists, bold and italics, in the same layout whichever AI wrote
+// it and however it formatted it (tables become lists). KEY POINTS and SCORES are shown on their own, so they're
+// left out here, along with any title or score summary at the top.
 function feedbackHtml(text=''){
   let t=text.replace(/\r/g,'');const cut=t.search(/\n[\s#*]*KEY POINTS:?/i);if(cut>=0)t=t.slice(0,cut);
   const inline=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*(?!\w)/g,'$1<i>$2</i>').replace(/`([^`]+)`/g,'<code>$1</code>');
   let html='',list=null;const close=()=>{if(list){html+=`</${list}>`;list=null;}};
   for(const raw of t.split('\n')){const l=raw.trim();let m;
-    if(!l||/^[-*_]{3,}$/.test(l)){close();continue;}
-    if(/^#*\s*\**scores?\**:?\**\s*$/i.test(l)||/clarity\s*[=:]\s*\d.*overall\s*[=:]\s*\d/i.test(l))continue;
-    if((m=l.match(/^#{1,6}\s+(.*)$/))){close();html+=`<h5>${inline(m[1].replace(/:\s*$/,''))}</h5>`;continue;}
+    if(!l)continue; // a blank line between points keeps them in one list
+    if(/^[-*_]{3,}$/.test(l)){close();continue;}
+    if(/^#*\s*\**scores?\**:?\**\s*$/i.test(l)||/clarity\s*[=:|]?\s*\d.*overall\s*[=:|]?\s*\d/i.test(l))continue;
+    if(/^#\s/.test(l)&&!sectionOf(l))continue; // a title ("# Feedback on your talk")
+    // A table row (tabs or pipes): one list item, its first cell in bold. Header and divider rows are dropped.
+    const cells=l.includes('\t')?l.split('\t'):/^\|.*\|$/.test(l)?l.slice(1,-1).split('|'):null;
+    if(cells&&cells.length>1){const c=cells.map(x=>x.trim()).filter(Boolean);
+      if(!c.length||/^[\s:|-]+$/.test(l)||/^(area|skill|category|criteri|metric|aspect)/i.test(c[0]))continue;
+      if(list!=='ul'){close();html+='<ul>';list='ul';}html+=`<li><b>${inline(c[0])}</b> ${c.slice(1).map(inline).join(' · ')}</li>`;continue;}
+    // Headings: markdown ones, and lines that are only a section's name ("1. Three strengths", "**Timing and pace**").
+    const bare=l.replace(/^#{1,6}\s+/,'').replace(/^\d+[.)]\s+/,'').replace(/\*\*/g,'').replace(/:\s*$/,'').trim(),sec=sectionOf(bare);
+    if(/^#{1,6}\s/.test(l)||(sec&&bare.split(/\s+/).length<=7&&/^(\d+[.)]\s+)?(\*\*)?[a-z][a-z ,'’-]*(\*\*)?:?(\*\*)?$/i.test(l))){close();html+=`<h5>${inline(sec||bare)}</h5>`;continue;}
     if((m=l.match(/^[-•*·]\s+(.*)$/))){if(list!=='ul'){close();html+='<ul>';list='ul';}html+=`<li>${inline(m[1])}</li>`;continue;}
     if((m=l.match(/^\d+[.)]\s+(.*)$/))){if(list!=='ol'){close();html+='<ol>';list='ol';}html+=`<li>${inline(m[1])}</li>`;continue;}
     close();html+=`<p>${inline(l)}</p>`;}

@@ -4,6 +4,9 @@ Versions follow [Semantic Versioning](https://semver.org): MAJOR.MINOR.PATCH.
 PATCH = bug fixes, MINOR = new features, MAJOR = the 1.0.0 public launch (and later, big breaking changes).
 Every push to the live app gets a new version, shown in Settings → About. Publish with `scripts/release.sh`.
 
+## v1.1.0 · 2026-11-03
+- Planning starts right after the spin (with a pause button); Get feedback asks the AI straight away and shows a loading bar; feedback in the pixel font with the same six sections every time and a measured pace card (talk time counts only while you speak); tap furniture and your cat goes to use it
+
 ## v1.0.2 · 2026-11-01
 - Fix: usage steps are recorded again
 

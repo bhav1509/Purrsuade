@@ -368,15 +368,37 @@ const REACTION_STEPS={
   pet:[{anim:'sit',dur:2.2,hearts:true}],
   cheer:[{to:'rug'},{at:'rug',anim:'jump',dur:.6},{at:'rug',anim:'jump',dur:.6},{at:'rug',anim:'jump',dur:.6},{at:'rug',anim:'sit',dur:2,hearts:true}],
 };
+// Tapping something in the room: the cat goes over and uses it (naps in a bed, climbs the cat tree, sits on the
+// armchair, plays with a toy, checks the bowls) or, for things it can't use, walks up to it and sits looking at it.
+// The steps for that, or null when nothing is under the pointer.
+function visitSteps(canvas,clientX,clientY){
+  const it=itemAt(canvas,clientX,clientY);if(!it)return null;
+  const fix=v=>Math.max(10,Math.min(170,v));
+  // Windows, paintings and clocks: sit on the floor below, facing the wall.
+  if(it.wall){const [side,a]=wallPos(it),m=a+wallSprite(it).wall_width_u/2;SPOT['~'+it.id]=side==='left'?[24,fix(m),0,true]:[fix(m),24,0,false];
+    return [{to:'~'+it.id},{at:'~'+it.id,anim:'sit',dur:4}];}
+  const seats=Object.keys(SPOT).filter(k=>k.startsWith(`@${it.id}:`));
+  if(seats.length){const k=seats[Math.floor(Math.random()*seats.length)],anim=SPOT[k][7];return [{to:k},{at:k,anim,dur:{sleep:6,inside:5,scratch:3}[anim]||4}];}
+  if(it.id==='bed')return [{to:'bed'},{at:'bed',anim:'sleep',dur:6}];
+  if(['food','water','litter'].includes(it.id))return [{to:it.id},{at:it.id,anim:'sit',dur:2.5}];
+  // A toy on the floor becomes the one the cat plays with.
+  const [x,y,z=0]=itemPos(it);
+  if(it.base.startsWith('toy_')&&!z){playToy=it.id;SPOT.yarn=[fix(x-6),y,0,false];return [{to:'yarn'},{at:'yarn',anim:'play',dur:3.5,hideYarn:true}];}
+  if(it.flat){SPOT['~'+it.id]=[x,y,0,false];return [{to:'~'+it.id},{at:'~'+it.id,anim:'sit',dur:4}];}
+  // Anything else (a plant, a lamp, a shelf and what's on it): the clear floor next to it, facing it.
+  const [fx,fy]=openFloorNear(x,y);SPOT['~'+it.id]=[fx,fy,0,(x-fx)-(y-fy)<0];
+  return [{to:'~'+it.id},{at:'~'+it.id,anim:'sit',dur:3}];
+}
 let catPlan=null,planReaction=null,planMood=null,planRoom=null;
 function resetCatPlan(){catPlan=null;planReaction=null;planMood=null;}
 function currentPose(time,cat,reaction){
   // Below 1 heart the cat is sick: it stays curled up in bed and ignores toys and treats.
   const health=(cat.hunger+cat.thirst+cat.cleanliness+cat.happiness)/4,mood=health<15?'sick':cat.happiness<25?'tired':'happy';
-  if(reaction&&mood==='sick'&&['play','treat','cheer'].includes(reaction.type))planReaction=reaction;
-  if(reaction&&reaction!==planReaction&&REACTION_STEPS[reaction.type]){
+  if(reaction&&mood==='sick'&&['play','treat','cheer','visit'].includes(reaction.type))planReaction=reaction;
+  const steps=reaction&&(reaction.steps||REACTION_STEPS[reaction.type]);
+  if(steps&&reaction!==planReaction){
     const p=catPlan?poseAt(catPlan,reaction.started):null,from=p?poseFrom(p):SPOT.bed;
-    catPlan=buildPlan(reaction.started,from,[...REACTION_STEPS[reaction.type],{to:mood==='happy'?'rug':'bed'}],false);planReaction=reaction;
+    catPlan=buildPlan(reaction.started,from,[...steps,{to:mood==='happy'?'rug':'bed'}],false);planReaction=reaction;
   }
   // Furniture moved (or bought, or put away): walk back to bed by the new routes, then pick the routine up again.
   if(catPlan&&catPlan.loop&&!arrange.drag&&planRoom&&(planRoom[0]!==roomItems||planRoom[1]!==roomLayout)){
@@ -517,7 +539,7 @@ function enableRoomCamera(canvas,{pinch,onTap,onChange,resetButton,zoomIn,zoomOu
     start=snap();canvas.classList.add('dragging');
   };
   canvas.onpointermove=e=>{
-    if(!pts.has(e.pointerId)){canvas.style.cursor=arrange.on?(itemAt(canvas,e.clientX,e.clientY)||graveAt(canvas,e.clientX,e.clientY)?'grab':''):catHit(canvas,e.clientX,e.clientY)?'pointer':'';return;}
+    if(!pts.has(e.pointerId)){canvas.style.cursor=arrange.on?(itemAt(canvas,e.clientX,e.clientY)||graveAt(canvas,e.clientX,e.clientY)?'grab':''):catHit(canvas,e.clientX,e.clientY)||itemAt(canvas,e.clientX,e.clientY)?'pointer':'';return;}
     pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(held){moved=true;held.move(e);onChange?.();return;}
     const now=snap();

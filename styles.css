@@ -639,14 +639,49 @@ button.chip.level{border:0;font:inherit;cursor:pointer}
 }
 
 /* AI feedback as formatted text (results page and journal) */
-.fb{font-family:Inter,ui-rounded,system-ui,sans-serif;letter-spacing:0;font-size:15px;line-height:1.55;color:var(--text)}
-.fb h5{margin:14px 0 4px;font-family:'Jersey 10',ui-monospace,monospace;font-weight:400;font-size:21px;letter-spacing:.02em;color:var(--butter)}
+.fb{font-family:'Jersey 10',ui-monospace,monospace;letter-spacing:.02em;font-size:19px;line-height:1.22;color:var(--text);font-size-adjust:none}
+.fb h5{margin:16px 0 6px;padding-bottom:3px;font-weight:400;font-size:23px;color:var(--butter);border-bottom:3px solid #120e1b}
 .fb h5:first-child{margin-top:2px}
 .fb p,.modal .fb p{margin:6px 0;font-size:inherit;line-height:inherit}
-.fb ul,.fb ol{margin:4px 0 8px;padding-left:22px;display:grid;gap:4px}
-.fb b{color:#fff}
-.fb i{color:#d6c9ff}
-.fb code{font-size:.92em;padding:0 4px;background:#2b2342}
+.fb ul,.fb ol{margin:4px 0 8px;padding-left:20px;display:grid;gap:5px}
+.fb li::marker{color:var(--mint)}
+.fb b{font-weight:400;color:var(--butter)}
+.fb i{font-style:normal;color:#d6c9ff}
+.fb code{font:inherit;padding:0 4px;background:#2b2342}
+
+/* Pace: words a minute in big pixel digits, the band it falls in, and a gauge with the comfortable zone */
+.pace-card{display:flex;align-items:center;gap:14px;padding:10px 12px;background:#18141f;box-shadow:0 0 0 3px #120e1b,inset 0 0 0 2px #3b3160;flex-shrink:0}
+.pace-card.ok{box-shadow:0 0 0 3px #120e1b,inset 0 0 0 2px #5fae8d}
+.pace-num{display:grid;justify-items:center;gap:2px;flex:none}
+.pace-num svg{display:block;width:auto;height:36px;fill:var(--butter)}
+.pace-num span{font-size:15px;color:var(--muted)}
+.pace-info{flex:1;min-width:0;display:grid;gap:3px}
+.pace-info b{font-weight:400;font-size:21px;color:var(--peach)}
+.pace-card.ok .pace-info b{color:var(--mint)}
+.pace-info>span,.pace-info small{font-size:16px;line-height:1.15;color:var(--muted)}
+.pace-gauge{position:relative;height:10px;margin-top:4px;background:#0000004d;box-shadow:0 0 0 2px #120e1b}
+.pace-gauge .zone{position:absolute;top:0;bottom:0;background:#5fae8d}
+.pace-gauge .mark{position:absolute;top:-4px;bottom:-4px;width:4px;margin-left:-2px;background:var(--butter);box-shadow:0 0 0 2px #120e1b}
+.pace-scale{display:flex;justify-content:space-between;font-size:14px;color:var(--muted)}
+.pace-scale em{font-style:normal}
+.modal .pace-card{margin-top:12px}
+.pb-quest .pace-card,.pb-quest .result-kp{margin:0;flex-shrink:0}
+
+/* Waiting for the AI: a pixel bar that keeps moving, and three hopping dots on the button */
+.loading-bar{height:10px;border-radius:0;background:#0000004d;position:relative}
+.loading-bar i{position:absolute;width:35%;border-radius:0;background:var(--lav);-webkit-mask:repeating-linear-gradient(90deg,#000 0 6px,transparent 6px 8px);mask:repeating-linear-gradient(90deg,#000 0 6px,transparent 6px 8px);animation:slide 1.4s steps(14) infinite}
+@keyframes slide{from{left:-35%}to{left:100%}}
+.instant-card.busy button{display:inline-flex;align-items:center;justify-content:center;gap:10px;opacity:1}
+.px-dots{display:inline-flex;gap:4px}
+.px-dots i{width:6px;height:6px;background:currentColor;animation:hop .9s steps(2) infinite}
+.px-dots i:nth-child(2){animation-delay:.15s}
+.px-dots i:nth-child(3){animation-delay:.3s}
+@keyframes hop{50%{transform:translateY(-4px)}}
+
+/* Planning: the topic's category above it, and a paused countdown dims */
+.speak-tier{font-size:16px;letter-spacing:.1em;color:var(--tier,var(--lav))}
+.speak-stage.paused .big-count{opacity:.45}
+.speak-stage>.mini{font-size:17px}
 
 /* Shop questions in the game's own dialog, with a picture of the item */
 .ask-thumb{display:block;width:96px;height:80px;margin:8px auto 0;image-rendering:pixelated;background:#18141f;box-shadow:0 0 0 3px #120e1b}
